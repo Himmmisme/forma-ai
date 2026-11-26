@@ -23,6 +23,8 @@
 
 2026-11-26 在临时 SQLite 实例执行 19 项后端测试并通过。新增用例用模拟 HTTP 验证历史文生图的同步 JSON、HTTP 200 中的失败终态，以及单张原图生成的 multipart 字段、运行队列、图片下载和版本保存。Ruff 检查及 TypeScript、Vite 生产构建通过。真实 VX 模型权限与实际出图需由操作者确认后验证。
 
+后续回归在 SQLite 和 PostgreSQL 17.12 两种环境各通过 21 项后端测试，在 Chromium 和 WebKit 分别通过 2 项端到端测试。模拟 HTTP 验证 PNG 附件、无状态字段的图片响应、VX 报告的上游 502、网关请求编号和旧型号失效时的重试保护。Ruff 检查及 TypeScript、Vite 生产构建通过。
+
 ## 复跑
 
 前置环境为 Python 3.12、Node.js 22.12 以上的 22.x 和 npm。以下命令从项目根目录执行。

@@ -79,7 +79,7 @@ export interface Call {
   http_status: number | null; elapsed_ms: number | null; usage: Record<string, unknown> | null; created_at: string;
 }
 export interface Job {
-  id: string; project_id: string | null; model_id: string | null; provider_id: string;
+  id: string; project_id: string | null; model_id: string | null; model_code: string | null; provider_id: string;
   kind: Task | "probe_connection" | "probe_model"; mock: boolean; status: Status; error: string | null; generation: number;
   result: {
     version_ids?: string[]; assets?: Asset[]; optimized?: string; conflicts?: string[];

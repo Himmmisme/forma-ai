@@ -19,6 +19,7 @@ from app.auth import member
 from app.catalog import (
     REAL_PROTOCOLS,
     Capability,
+    can_serve,
     external_enabled,
     get_model,
     get_provider,
@@ -70,6 +71,7 @@ def job_view(job: Job, logs: list[CallLog] | None = None):
     return {
         **json_fields(job, *JOB_FIELDS),
         "mock": job.inputs["provider"]["protocol"] == "mock",
+        "model_code": (job.inputs.get("model") or {}).get("model_code"),
         **({"calls": [json_fields(row, *CALL_FIELDS) for row in logs]} if logs is not None else {}),
     }
 
@@ -155,6 +157,14 @@ def retry_job(job_id: str, body: RetryInput, request: Request,
             return job_view(previous)
         if previous.status != "failed":
             fail(409, "只有失败的任务可重试")
+        if previous.kind in IMAGE_TASKS:
+            model = db.get(Model, previous.model_id) if previous.model_id else None
+            provider = db.get(Provider, previous.provider_id)
+            saved_code = (previous.inputs.get("model") or {}).get("model_code")
+            if (not model or not provider or model.model_code != saved_code
+                    or provider.base_url != previous.inputs["provider"]["base_url"]
+                    or not can_serve(model, provider, previous.kind)):
+                fail(409, "原任务的图片模型或服务商配置已失效，请在工作台选择图片模型并创建新任务")
         if previous.inputs["provider"]["protocol"] in REAL_PROTOCOLS and not body.ack_external:
             fail(422, "重试可能再次计费，请确认")
         if previous.inputs["provider"]["protocol"] in REAL_PROTOCOLS and not external_enabled(db):

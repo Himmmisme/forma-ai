@@ -109,8 +109,11 @@ async def pinned_address(url: httpx.URL) -> str:
 
 
 def response_id(headers: httpx.Headers) -> str | None:
-    value = headers.get("x-request-id") or headers.get("x-goog-request-id")
-    return value if value and re.fullmatch(r"[A-Za-z0-9:_-]{1,120}", value) else None
+    for name in ("x-oneapi-request-id", "x-request-id", "x-goog-request-id"):
+        value = headers.get(name)
+        if value and re.fullmatch(r"[A-Za-z0-9:_-]{1,120}", value):
+            return value
+    return None
 
 
 class SafeHTTP:

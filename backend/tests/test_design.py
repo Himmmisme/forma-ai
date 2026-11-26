@@ -2,12 +2,13 @@ import asyncio
 import json
 
 import pytest
+from httpx import Headers
 from sqlalchemy import select
 from test_accounts_projects import png
 
 from app.adapters import VX_BASE_URL, CompatibleAdapter, GeminiAdapter, ImageInput, OpenAIAdapter
 from app.models import Job, Model, Provider
-from app.transport import SafeHTTP, UpstreamError, public_ip, unseal
+from app.transport import SafeHTTP, UpstreamError, public_ip, response_id, unseal
 
 
 def design_payload(owner, project, asset, **extra):
@@ -143,7 +144,9 @@ def test_vx_gpt_image_probe_uses_synchronous_generation_and_rejects_failed_resul
     http = Stub()
     http.responses = [
         {"status": "succeeded", "data": [{"b64_json": "YQ=="}]},
-        {"status": "failed", "data": [{"b64_json": "YQ=="}]},
+        {"data": [{"b64_json": "YQ=="}]},
+        {"status": "failed", "failure_reason": "status_code=502, upstream request failed", "data": [{"b64_json": "YQ=="}]},
+        {"status": "succeeded", "data": []},
     ]
     adapter = CompatibleAdapter(VX_BASE_URL, "test", 5, http, http)
     model = "gpt-image-2.5-pro"
@@ -155,9 +158,12 @@ def test_vx_gpt_image_probe_uses_synchronous_generation_and_rejects_failed_resul
                               "quality": "auto", "stream": False, "async": False}
     with pytest.raises(UpstreamError, match="仅有文生图接口"):
         asyncio.run(adapter.images(model, "prompt", [ImageInput("image/png", b"image bytes")], output))
-    with pytest.raises(UpstreamError, match="未返回成功的图片结果"):
+    assert asyncio.run(adapter.images(model, "prompt", [], output)) == [b"a"]
+    with pytest.raises(UpstreamError, match="上游 HTTP 502"):
         asyncio.run(adapter.images(model, "prompt", [], output))
-    assert len(http.requests) == 2
+    with pytest.raises(UpstreamError, match="缺少可下载的图片链接"):
+        asyncio.run(adapter.images(model, "prompt", [], output))
+    assert len(http.requests) == 4
 
 
 def test_vx_project_generation_uses_single_multipart_image(owner, application, monkeypatch):
@@ -201,11 +207,54 @@ def test_vx_project_generation_uses_single_multipart_image(owner, application, m
     assert len(completed["result"]["version_ids"]) == 1
     method, path, params = http.requests[0]
     assert (method, path) == ("POST", VX_BASE_URL + "/images/edits")
-    assert [name for name, _ in params["files"]] == ["image"]
+    [(field_name, (filename, image_bytes, mime))] = params["files"]
+    assert (field_name, filename, mime) == ("image", "input.png", "image/png")
+    assert image_bytes.startswith(b"\x89PNG\r\n\x1a\n")
     assert params["data"]["size"] == "1K"
     assert params["data"]["aspect_ratio"] == "1:1"
     assert http.requests[1][:2] == ("GET", result_url)
     assert "headers" not in http.requests[1][2]
+
+
+def test_retry_rejects_image_job_when_the_saved_model_no_longer_supports_generation(owner, application, monkeypatch):
+    http = Stub()
+    http.responses = [{"error": {"message": "upstream test failure"}}]
+
+    async def request(_transport, method, path, **params):
+        return await http.request(method, path, **params)
+
+    monkeypatch.setattr(SafeHTTP, "request", request)
+    provider = owner.post("/api/admin/providers", json={
+        "name": "测试服务商", "protocol": "compatible", "base_url": "https://api.example.com/v1", "api_key": "mock-key",
+    })
+    assert provider.status_code == 201, provider.text
+    model = {"provider_id": provider.json()["id"], "name": "测试模型", "model_code": "demo-model",
+             "capabilities": ["image_generate", "image_edit"],
+             "sizes": [{"ratio": "1:1", "label": "1024", "value": "1024x1024"}]}
+    created = owner.post("/api/admin/models", json=model)
+    assert created.status_code == 201, created.text
+    model_id = created.json()["id"]
+    project, image = new_project(owner)
+    body = design_payload(owner, project, image, model_id=model_id, ack_external=True,
+                          output={"count": 1, "ratio": "1:1", "size": "1024x1024"})
+    queued = owner.post(f"/api/projects/{project}/generate", json=body)
+    assert queued.status_code == 202, queued.text
+    job_id = execute_queued(application)
+    path = f"/api/jobs/{job_id}"
+    failed = owner.get(path).json()
+    assert failed["status"] == "failed" and failed["model_code"] == "demo-model"
+    edited = owner.put(f"/api/admin/models/{model_id}", json={**model, "capabilities": ["text"]})
+    assert edited.status_code == 200, edited.text
+
+    retry = owner.post(path + "/retry", json={"ack_external": True})
+    assert retry.status_code == 409 and "创建新任务" in retry.json()["detail"]
+    assert owner.get(path).json() == failed
+    assert len(http.requests) == 1
+
+
+def test_oneapi_request_id_is_used_when_valid():
+    assert response_id(Headers({"x-oneapi-request-id": "gateway-trace_1", "x-request-id": "edge-trace"})) == "gateway-trace_1"
+    assert response_id(Headers({"x-oneapi-request-id": "invalid / trace", "x-request-id": "edge-trace"})) == "edge-trace"
 
 
 def test_network_address_filter():

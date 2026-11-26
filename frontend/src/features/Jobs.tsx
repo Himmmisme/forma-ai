@@ -36,23 +36,26 @@ export function JobLog({ id, onClose }: { id: string; onClose: () => void }) {
 export function RetryJob({ job, refresh }: { job: Job; refresh: () => void }) {
   const action = useAction();
   if (job.status !== "failed") return null;
+  const imageJob = job.kind === "generate" || job.kind === "edit";
   return <div className="form-stack">
     <Button busy={action.busy} onClick={() => {
-      if (!job.mock && !window.confirm("确认重新向外部服务提交。该操作可能再次计费。")) return;
+      const model = job.model_code ? `「${job.model_code}」` : "原任务所用的服务商";
+      if (!job.mock && !window.confirm(`将按原任务参数再次调用${model}，可能再次计费。`)) return;
       void action.run(async () => { await api(`/jobs/${job.id}/retry`, "POST", { ack_external: !job.mock }); refresh(); });
-    }}><RotateCw size={15} />重试</Button>
+    }}><RotateCw size={15} />{imageJob ? "按原模型重试" : "重试"}</Button>
     <ErrorLine error={action.error} />
   </div>;
 }
 
-export function JobItem({ job, onPreview, refresh, assetActions, children }: {
-  job: Job; onPreview?: (asset: Asset) => void; refresh: () => void; assetActions?: (index: number) => ReactNode; children?: ReactNode;
+export function JobItem({ job, onPreview, refresh, assetActions, children, canRetry = true }: {
+  job: Job; onPreview?: (asset: Asset) => void; refresh: () => void; assetActions?: (index: number) => ReactNode;
+  children?: ReactNode; canRetry?: boolean;
 }) {
   const [log, setLog] = useState(false);
   return <article className="job-item">
     <div className="split-row job-heading">
       <div><strong>{job.kind === "probe_connection" ? "连接测试" : job.kind === "probe_model" ? "能力测试" : taskNames[job.kind]}</strong>
-        <small>{dateTime(job.created_at)}{job.mock ? " · Mock" : ""}</small></div>
+        <small>{dateTime(job.created_at)}{job.mock ? " · Mock" : job.model_code ? ` · ${job.model_code}` : ""}</small></div>
       <div className="actions"><JobStatus job={job} /><Button variant="ghost" onClick={() => setLog(true)}><Activity size={15} />记录</Button></div>
     </div>
     <ErrorLine error={job.error ?? undefined} />
@@ -69,7 +72,7 @@ export function JobItem({ job, onPreview, refresh, assetActions, children }: {
       </div>)}
     </div>}
     {children}
-    <RetryJob job={job} refresh={refresh} />
+    {canRetry && <RetryJob job={job} refresh={refresh} />}
     {log && <JobLog id={job.id} onClose={() => setLog(false)} />}
   </article>;
 }

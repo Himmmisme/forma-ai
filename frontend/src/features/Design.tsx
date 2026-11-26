@@ -50,6 +50,7 @@ function DesignForm({ project, assets, catalog, onPreview, sources, parent, clea
   const [optimization, setOptimization] = useState<Job>();
   const [parameters, setParameters] = useState<string>();
   const anchor = useRef<HTMLDivElement>(null);
+  const modelPicker = useRef<HTMLSelectElement>(null);
   useEffect(() => {
     if (parent?.id) anchor.current?.scrollIntoView({ block: "start" });
   }, [parent?.id]);
@@ -153,7 +154,7 @@ function DesignForm({ project, assets, catalog, onPreview, sources, parent, clea
         </section>
         <section className="panel form-stack">
           <div className="split-row"><h2>输出设置</h2>{active?.protocol === "mock" && <span className="badge">Mock 模式</span>}</div>
-          <Field label="图片模型"><select value={active?.id ?? ""} onChange={(event) => { setModelId(event.target.value); setRatio(""); setSize(""); }}
+          <Field label="图片模型"><select ref={modelPicker} value={active?.id ?? ""} onChange={(event) => { setModelId(event.target.value); setRatio(""); setSize(""); }}
             disabled={disabled}>{models.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
           <div className="form-grid">
             <Field label="图片比例"><select value={selectedRatio ?? ""} onChange={(event) => { setRatio(event.target.value); setSize(""); }} disabled={disabled}>
@@ -202,14 +203,25 @@ function DesignForm({ project, assets, catalog, onPreview, sources, parent, clea
           <ErrorLine error={jobs.error} />
           {jobs.loading && <Loading />}
           {!jobs.loading && !jobs.data?.length && <Empty icon={<ImageIcon size={25} />} title="等待首个设计成果" description="提交设计后在这里查看队列状态、预览和下载。" />}
-          <div className="form-stack">{jobs.data?.map((job) => <JobItem key={job.id} job={job} onPreview={onPreview} refresh={jobs.refresh}
-            assetActions={(index) => {
-              const id = job.result?.version_ids?.[index];
-              return id ? <><VersionLinks id={id} project={project.id} />
-                <Button variant="ghost" onClick={() => setParameters(id)}><ListTree size={15} />参数</Button></> : null;
-            }}>
-            {job.result?.optimized && <Button onClick={() => setOptimization(job)}>查看优化结果</Button>}
-          </JobItem>)}</div>
+          <div className="form-stack">{jobs.data?.map((job) => {
+            const originalModel = catalog.models.find((row) => row.id === job.model_id);
+            const retryBlocked = job.status === "failed" && (job.kind === "generate" || job.kind === "edit")
+              && (!originalModel?.tasks?.includes(job.kind) || Boolean(job.model_code && originalModel.model_code !== job.model_code));
+            return <JobItem key={job.id} job={job} onPreview={onPreview} refresh={jobs.refresh} canRetry={!retryBlocked}
+              assetActions={(index) => {
+                const id = job.result?.version_ids?.[index];
+                return id ? <><VersionLinks id={id} project={project.id} />
+                  <Button variant="ghost" onClick={() => setParameters(id)}><ListTree size={15} />参数</Button></> : null;
+              }}>
+              {retryBlocked && <div className="form-stack">
+                <p className="subtle compact">原任务的图片模型当前不可用。请选择有效模型创建新任务。</p>
+                {job.kind === task && <div className="actions">
+                  <Button variant="ghost" disabled={disabled} onClick={() => modelPicker.current?.focus()}>前往生成设置</Button>
+                </div>}
+              </div>}
+              {job.result?.optimized && <Button onClick={() => setOptimization(job)}>查看优化结果</Button>}
+            </JobItem>;
+          })}</div>
         </section>
       </div>
     </div>

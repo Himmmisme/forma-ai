@@ -57,6 +57,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 
 `gpt-image-2.5` 和 `gpt-image-2.5-pro` 的文生图接口在 VX 文档中列为历史资料。对于仍有相应权限的令牌，Forma AI 的图片生成能力测试可按该历史请求格式提交。两款型号均缺少工作台使用原图所需的图像编辑能力。正式使用前，先核对当前令牌权限和模型分组，再由操作者确认实际调用。[VX API 接入文档](https://la-api.vxvxvx.top/manual/vx-api.html)
 
+换用模型后，在工作台点「生成设计」创建任务。失败卡片显示提交时使用的型号，按原模型重试沿用原参数。排查 VX 的上游错误时，可用任务记录里的请求编号查询 [VX 使用日志](https://la-api.vxvxvx.top/usage-logs/common)。
+
 ## 备份及恢复
 
 1. 超管打开「管理后台 → 系统日志及备份 → 整站备份」，创建并下载 ZIP。项目 ZIP 可独立交付给项目成员，实例恢复使用含 `manifest.json` 的完整快照。

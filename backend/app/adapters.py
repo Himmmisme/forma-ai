@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import json
+import re
 from dataclasses import dataclass
 
 from PIL import Image, ImageEnhance, ImageOps
@@ -58,6 +59,24 @@ def decoded_image(value):
         raise UpstreamError("服务商图片 Base64 无效") from error
 
 
+def check_vx_image_response(response, http_status):
+    error = response.get("error")
+    reason = response.get("failure_reason")
+    if error or reason or response.get("status") == "failed":
+        for detail in (error.get("message") if isinstance(error, dict) else error, reason):
+            if isinstance(detail, str) and (match := re.search(r"\bstatus_code=([45][0-9]{2})\b", detail[:1024])):
+                raise UpstreamError(f"VX API 报告上游 HTTP {match[1]}，请查看对应的 VX 使用日志")
+        raise UpstreamError(f"VX API 在 HTTP {http_status} 响应中报告生图失败，请查看对应的 VX 使用日志")
+    if response.get("status", "succeeded") != "succeeded":
+        raise UpstreamError("VX API 未返回生图成功的终态，请查看对应的 VX 使用日志")
+    rows = response.get("data")
+    if not isinstance(rows, list) or not any(
+        isinstance(row, dict) and any(isinstance(row.get(key), str) and row[key] for key in ("url", "b64_json"))
+        for row in rows
+    ):
+        raise UpstreamError("VX API 响应缺少可下载的图片链接或 Base64 数据")
+
+
 class RemoteAdapter:
     def __init__(self, base_url, key, timeout, observer, http=None):
         self.base_url = base_url
@@ -77,10 +96,9 @@ class RemoteAdapter:
             response = json.loads(raw)
             if not isinstance(response, dict):
                 raise UpstreamError("服务商返回了错误或无效响应")
-            if vx_image and (response.get("status") != "succeeded" or response.get("error")
-                             or not isinstance(response.get("data"), list) or not response["data"]):
-                raise UpstreamError("VX API 未返回成功的图片结果，请在服务商使用日志中核对模型和分组")
-            if response.get("error"):
+            if vx_image:
+                check_vx_image_response(response, status)
+            elif response.get("error"):
                 raise UpstreamError("服务商返回了错误或无效响应")
         except (ValueError, UnicodeError) as error:
             self.observer.finish(log, "failed", status, request_id)
@@ -157,7 +175,13 @@ class CompatibleAdapter(OpenAIAdapter):
                   "aspect_ratio": output["ratio"]}
         if images:
             image = images[0]
-            files = [("image", (f"input.{IMAGE_EXTENSIONS[image.mime]}", image.data, image.mime))]
+            content = image.data
+            if image.mime != "image/png":
+                buffer = io.BytesIO()
+                with Image.open(io.BytesIO(content)) as decoded:
+                    decoded.save(buffer, "PNG")
+                content = buffer.getvalue()
+            files = [("image", ("input.png", content, "image/png"))]
             data = await self.json("images.edits", "/images/edits", vx_image=True,
                                    data={**fields, "n": "1", "stream": "false"}, files=files)
         else:
