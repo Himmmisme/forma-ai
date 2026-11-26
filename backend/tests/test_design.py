@@ -1,12 +1,13 @@
 import asyncio
 import json
 
+import pytest
 from sqlalchemy import select
 from test_accounts_projects import png
 
-from app.adapters import CompatibleAdapter, GeminiAdapter, ImageInput, OpenAIAdapter
-from app.models import Job, Provider
-from app.transport import public_ip, unseal
+from app.adapters import VX_BASE_URL, CompatibleAdapter, GeminiAdapter, ImageInput, OpenAIAdapter
+from app.models import Job, Model, Provider
+from app.transport import SafeHTTP, UpstreamError, public_ip, unseal
 
 
 def design_payload(owner, project, asset, **extra):
@@ -101,7 +102,8 @@ class Stub:
 
     async def request(self, method, path, **params):
         self.requests.append((method, path, params))
-        return json.dumps(self.responses.pop(0)).encode(), 200, "request_test"
+        response = self.responses.pop(0)
+        return (response if isinstance(response, bytes) else json.dumps(response).encode()), 200, "request_test"
 
     def start(self, operation):
         return operation
@@ -135,6 +137,75 @@ def test_official_request_shapes_use_documented_paths():
     assert http.requests[3][1].endswith("/models/gemini-test:generateContent")
     assert http.requests[3][2]["headers"] == {"x-goog-api-key": "test"}
     assert http.requests[3][2]["json"]["generationConfig"]["imageConfig"] == {"aspectRatio": "1:1", "imageSize": "2K"}
+
+
+def test_vx_gpt_image_probe_uses_synchronous_generation_and_rejects_failed_results():
+    http = Stub()
+    http.responses = [
+        {"status": "succeeded", "data": [{"b64_json": "YQ=="}]},
+        {"status": "failed", "data": [{"b64_json": "YQ=="}]},
+    ]
+    adapter = CompatibleAdapter(VX_BASE_URL, "test", 5, http, http)
+    model = "gpt-image-2.5-pro"
+    output = {"ratio": "1:1", "size": "1024x1024", "count": 1}
+    assert asyncio.run(adapter.images(model, "prompt", [], output)) == [b"a"]
+    method, url, params = http.requests[0]
+    assert (method, url) == ("POST", VX_BASE_URL + "/images/generations")
+    assert params["json"] == {"model": model, "prompt": "prompt", "size": "1K", "aspect_ratio": "1:1",
+                              "quality": "auto", "stream": False, "async": False}
+    with pytest.raises(UpstreamError, match="仅有文生图接口"):
+        asyncio.run(adapter.images(model, "prompt", [ImageInput("image/png", b"image bytes")], output))
+    with pytest.raises(UpstreamError, match="未返回成功的图片结果"):
+        asyncio.run(adapter.images(model, "prompt", [], output))
+    assert len(http.requests) == 2
+
+
+def test_vx_project_generation_uses_single_multipart_image(owner, application, monkeypatch):
+    http = Stub()
+    result_url = "https://assets.example.com/generated.png"
+    http.responses = [{"status": "succeeded", "data": [{"url": result_url}]}, png()]
+
+    async def request(_transport, method, path, **params):
+        return await http.request(method, path, **params)
+
+    monkeypatch.setattr(SafeHTTP, "request", request)
+    provider = owner.post("/api/admin/providers", json={
+        "name": "VX API", "protocol": "compatible", "base_url": VX_BASE_URL, "api_key": "mock-test-key",
+    })
+    assert provider.status_code == 201, provider.text
+    model = {"provider_id": provider.json()["id"], "name": "VX 单图模型",
+             "model_code": "gemini-nano-banana-2.1", "capabilities": ["image_generate", "image_edit"],
+             "sizes": [{"ratio": "1:1", "label": "1K", "value": "1K"}]}
+    created = owner.post("/api/admin/models", json=model)
+    assert created.status_code == 201, created.text
+    legacy = owner.post("/api/admin/models", json={**model, "name": "VX 文生图",
+                        "model_code": "gpt-image-2.5-pro", "capabilities": ["image_generate"]})
+    assert legacy.status_code == 201, legacy.text
+    legacy_id = legacy.json()["id"]
+    with application.state.sessions() as db:
+        db.get(Model, legacy_id).capabilities = ["image_generate", "image_edit", "multi_image"]
+        db.commit()
+    catalog = owner.get("/api/admin/catalog").json()
+    assert next(item for item in catalog["models"] if item["id"] == legacy_id)["capabilities"] == ["image_generate"]
+    assert owner.put("/api/admin/bindings/generate", json={"model_id": legacy_id}).status_code == 422
+    assert owner.put("/api/admin/bindings/edit", json={"model_id": created.json()["id"]}).status_code == 422
+    assert owner.put("/api/admin/bindings/generate", json={"model_id": created.json()["id"]}).status_code == 200
+
+    project, asset = new_project(owner)
+    body = design_payload(owner, project, asset, ack_external=True,
+                          output={"count": 1, "ratio": "1:1", "size": "1K"})
+    queued = owner.post(f"/api/projects/{project}/generate", json=body)
+    assert queued.status_code == 202, queued.text
+    completed = owner.get(f"/api/jobs/{execute_queued(application)}").json()
+    assert completed["status"] == "succeeded", completed
+    assert len(completed["result"]["version_ids"]) == 1
+    method, path, params = http.requests[0]
+    assert (method, path) == ("POST", VX_BASE_URL + "/images/edits")
+    assert [name for name, _ in params["files"]] == ["image"]
+    assert params["data"]["size"] == "1K"
+    assert params["data"]["aspect_ratio"] == "1:1"
+    assert http.requests[1][:2] == ("GET", result_url)
+    assert "headers" not in http.requests[1][2]
 
 
 def test_network_address_filter():

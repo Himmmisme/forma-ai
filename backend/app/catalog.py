@@ -6,6 +6,7 @@ from pydantic import Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.adapters import VX_IMAGE_SIZES, vx_image_mode
 from app.auth import admin, member, superadmin
 from app.core import Input, audit, database, fail, json_fields
 from app.models import Model, ModelBinding, PromptTemplate, Provider, Setting, User
@@ -108,9 +109,17 @@ def seed_catalog(db: Session):
     db.commit()
 
 
+def model_capabilities(model: Model | ModelInput, provider: Provider):
+    mode = vx_image_mode(provider.base_url, model.model_code) if provider.protocol == "compatible" else None
+    if not mode:
+        return model.capabilities
+    excluded = {"image_edit", "multi_image"} if mode == "text_to_image" else {"multi_image"}
+    return [capability for capability in model.capabilities if capability not in excluded]
+
+
 def model_view(model: Model, provider: Provider):
-    return {**json_fields(model, *MODEL_FIELDS), "provider_name": provider.name, "protocol": provider.protocol,
-            "provider_enabled": provider.enabled}
+    return {**json_fields(model, *MODEL_FIELDS), "capabilities": model_capabilities(model, provider),
+            "provider_name": provider.name, "protocol": provider.protocol, "provider_enabled": provider.enabled}
 
 
 def provider_view(provider: Provider):
@@ -121,10 +130,13 @@ def provider_view(provider: Provider):
 
 
 def can_serve(model: Model, provider: Provider, task: str) -> bool:
-    if not model.enabled or not provider.enabled or TASK_CAP[task] not in model.capabilities:
+    capabilities = model_capabilities(model, provider)
+    if not model.enabled or not provider.enabled or TASK_CAP[task] not in capabilities:
         return False
     if task == "generate" and provider.protocol in {"openai", "compatible"}:
-        return "image_edit" in model.capabilities
+        return "image_edit" in capabilities
+    if task == "edit":
+        return model.max_inputs >= 2 and "multi_image" in capabilities
     return True
 
 
@@ -230,7 +242,15 @@ def save_model(body: ModelInput, db: Session, actor: User, model: Model | None =
         fail(422, "内置模型固定。更换服务商请新建模型。")
     if provider.protocol == "gemini" and any(char in body.model_code for char in "/:@"):
         fail(422, "Gemini 模型 ID 请填写 models/ 之后的名称")
-    if provider.protocol in {"openai", "compatible"} and any(
+    vx_image = provider.protocol == "compatible" and vx_image_mode(provider.base_url, body.model_code)
+    if vx_image:
+        if model_capabilities(body, provider) != body.capabilities:
+            fail(422, "该 VX API 型号不支持所选的图片编辑或多图能力")
+        if body.max_count != 1 or body.max_inputs != 1:
+            fail(422, "该 VX API 型号的最大输入张数和最大生成张数请设为 1")
+        if any(item.value not in VX_IMAGE_SIZES for item in body.sizes):
+            fail(422, "VX API 图片规格请填写 1K、2K 或 4K")
+    elif provider.protocol in {"openai", "compatible"} and any(
         item.value != "auto" and not re.fullmatch(r"\d+x\d+", item.value) for item in body.sizes
     ):
         fail(422, "OpenAI 图片规格请填写宽x高或 auto")

@@ -10,6 +10,8 @@ UI 使用自有 CSS 设计变量和可复用组件，Lucide 提供应用图标�
 
 OpenAI 官方文本与视觉走 Responses，图片工作台将多角度素材传给 Images Edits。兼容协议使用 Chat Completions 和 Images，具体支持范围由能力测试确认。Gemini 使用 generateContent 的 inlineData 和 generationConfig，每个输出发起一次调用。管理后台由部署者填写已开通的模型 ID。参见 [OpenAI Images Edits](https://developers.openai.com/api/reference/resources/images/methods/edit/)和 [Gemini GenerateContent](https://aistudio.google.com/api-reference/generate-content/generate-content)。
 
+VX API 的指定图片型号使用其文档中的同步 Images 请求。历史 GPT 图像型号只提供文生图测试，带原图的任务可选 VX 已验证的 Gemini 图像型号。该网关的单图编辑使用 `image` 表单字段，返回 `succeeded` 和图片数据后才接收结果。[VX API 接入文档](https://la-api.vxvxvx.top/manual/vx-api.html)
+
 外部请求仅使用 HTTPS，禁用重定向和系统代理。解析到的地址均须为公网地址，连接固定在已验证的 IP，并用原始域名验证 TLS。预签名图片地址按相同规则访问，下载请求不携带服务商凭据。
 
 任务执行器在单个 Web 进程内运行，PostgreSQL 队列取用行锁及 `SKIP LOCKED`；并发按全局槽位和服务商设置限制。执行线程每 8 秒更新租约，40 秒未更新的运行任务可标记为中断。计划内停机等待执行线程，上游接收情况不明时保留调用记录并由用户重试。SQLite 是本地单进程模式。

@@ -9,6 +9,21 @@ from PIL import Image, ImageEnhance, ImageOps
 from app.storage import OUTPUT_LIMIT
 from app.transport import SafeHTTP, UpstreamError
 
+VX_BASE_URL = "https://la-api.vxvxvx.top/v1"
+VX_IMAGE_MODES = {
+    "gpt-image-2.5": "text_to_image",
+    "gpt-image-2.5-pro": "text_to_image",
+    "gemini-nano-banana-2.1": "single_image",
+    "gemini-3-pro-image-preview": "single_image",
+    "gemini-3.1-flash-image-preview": "single_image",
+}
+VX_IMAGE_SIZES = {"1K", "2K", "4K", "1024x1024"}
+IMAGE_EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+
+
+def vx_image_mode(base_url: str, model: str) -> str | None:
+    return VX_IMAGE_MODES.get(model) if base_url == VX_BASE_URL else None
+
 
 @dataclass(frozen=True)
 class ImageInput:
@@ -54,13 +69,18 @@ class RemoteAdapter:
     def headers(self):
         return {"Authorization": f"Bearer {self.key}"}
 
-    async def json(self, operation, path, *, method="POST", **kwargs):
+    async def json(self, operation, path, *, method="POST", vx_image=False, **kwargs):
         log = self.observer.start(operation)
         status = request_id = None
         try:
             raw, status, request_id = await self.http.request(method, self.base_url + path, headers=self.headers, **kwargs)
             response = json.loads(raw)
-            if not isinstance(response, dict) or response.get("error"):
+            if not isinstance(response, dict):
+                raise UpstreamError("服务商返回了错误或无效响应")
+            if vx_image and (response.get("status") != "succeeded" or response.get("error")
+                             or not isinstance(response.get("data"), list) or not response["data"]):
+                raise UpstreamError("VX API 未返回成功的图片结果，请在服务商使用日志中核对模型和分组")
+            if response.get("error"):
                 raise UpstreamError("服务商返回了错误或无效响应")
         except (ValueError, UnicodeError) as error:
             self.observer.finish(log, "failed", status, request_id)
@@ -94,14 +114,16 @@ class OpenAIAdapter(RemoteAdapter):
     async def images(self, model, prompt, images, output):
         fields = {"model": model, "prompt": prompt, "size": output["size"], "n": str(output["count"])}
         if images:
-            extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
-            files = [("image[]", (f"input-{index}.{extension[image.mime]}", image.data, image.mime))
+            files = [("image[]", (f"input-{index}.{IMAGE_EXTENSIONS[image.mime]}", image.data, image.mime))
                      for index, image in enumerate(images)]
             data = await self.json("images.edits", "/images/edits", data=fields, files=files)
         else:
             data = await self.json("images.generations", "/images/generations", json={**fields, "n": output["count"]})
+        return await self.image_results(data, output["count"])
+
+    async def image_results(self, data, count):
         files = []
-        for row in data["data"][:output["count"] + 1]:
+        for row in data["data"][:count + 1]:
             if row.get("b64_json"):
                 files.append(decoded_image(row["b64_json"]))
             elif isinstance(row.get("url"), str):
@@ -119,6 +141,35 @@ class CompatibleAdapter(OpenAIAdapter):
             "model": model, "messages": [{"role": "user", "content": content if images else prompt}],
         })
         return data["choices"][0]["message"]["content"]
+
+    async def images(self, model, prompt, images, output):
+        mode = vx_image_mode(self.base_url, model)
+        if not mode:
+            return await super().images(model, prompt, images, output)
+        if mode == "text_to_image" and images:
+            raise UpstreamError("VX API 的该型号仅有文生图接口。请为原图生成选择支持图片编辑的型号")
+        if len(images) > 1 or output["count"] != 1:
+            raise UpstreamError("VX API 的该型号每次最多接收一张输入图并生成一张结果图")
+        size = output["size"]
+        if size not in VX_IMAGE_SIZES:
+            raise UpstreamError("VX API 图片规格请填写 1K、2K 或 4K")
+        fields = {"model": model, "prompt": prompt, "size": "1K" if size == "1024x1024" else size,
+                  "aspect_ratio": output["ratio"]}
+        if images:
+            image = images[0]
+            files = [("image", (f"input.{IMAGE_EXTENSIONS[image.mime]}", image.data, image.mime))]
+            data = await self.json("images.edits", "/images/edits", vx_image=True,
+                                   data={**fields, "n": "1", "stream": "false"}, files=files)
+        else:
+            if mode == "text_to_image":
+                if len(prompt) > 1024 or output["ratio"] not in {"1:1", "3:2", "2:3"}:
+                    raise UpstreamError("VX API 的该型号要求提示词最多 1024 字，比例为 1:1、3:2 或 2:3")
+                fields.update({"quality": "auto", "async": False})
+            else:
+                fields["n"] = 1
+            data = await self.json("images.generations", "/images/generations", vx_image=True,
+                                   json={**fields, "stream": False})
+        return await self.image_results(data, 1)
 
 
 class GeminiAdapter(RemoteAdapter):

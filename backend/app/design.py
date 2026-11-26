@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import member
-from app.catalog import choose_model
+from app.catalog import choose_model, model_capabilities
 from app.core import Input, database, fail
 from app.jobs import JobRequest, enqueue, existing_job, fingerprint, job_view
 from app.models import Asset, DesignVersion, Job, User, utcnow
@@ -66,8 +66,9 @@ def selected_assets(db, project_id, ids, kind, historic=()):
 
 
 def input_limits(images, model, provider):
-    if len(images) > model.max_inputs or len(images) > 1 and "multi_image" not in model.capabilities:
-        fail(422, f"该模型最多支持 {model.max_inputs} 张输入图，请调整选择")
+    max_inputs = model.max_inputs if "multi_image" in model_capabilities(model, provider) else 1
+    if len(images) > max_inputs:
+        fail(422, f"该模型最多支持 {max_inputs} 张输入图，请调整选择")
     megabytes = 14 if provider.protocol == "gemini" else 32
     if provider.protocol != "mock" and sum(row.size for row in images) > megabytes * 1024 * 1024:
         fail(422, f"输入图片总大小超过 {megabytes} MB，请减少图片")

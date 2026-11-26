@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session
 
 from app.adapters import ADAPTERS, ImageInput, mock_images, structured
 from app.auth import member
-from app.catalog import REAL_PROTOCOLS, Capability, external_enabled, get_model, get_provider
+from app.catalog import (
+    REAL_PROTOCOLS,
+    Capability,
+    external_enabled,
+    get_model,
+    get_provider,
+    model_capabilities,
+)
 from app.core import Input, audit, database, fail, json_fields
 from app.material_schema import MOCK_MATERIALS, MaterialData
 from app.models import Asset, CallLog, DesignVersion, Job, Model, Provider, User, utcnow
@@ -111,7 +118,8 @@ def enqueue(db, user, project, kind, body, digest, model, provider, payload):
         inputs={
             **payload,
             "provider": json_fields(provider, "id", "name", "protocol", "base_url"),
-            "model": json_fields(model, "id", "name", "model_code", "capabilities", "pricing") if model else None,
+            "model": {**json_fields(model, "id", "name", "model_code", "pricing"),
+                      "capabilities": model_capabilities(model, provider)} if model else None,
         },
     )
     db.add(job)
@@ -172,8 +180,8 @@ def test_model(model_id: str, body: Probe, request: Request,
     if user.role != "superadmin":
         fail(403, "需要超级管理员权限")
     model, provider = get_model(db, model_id)
-    if body.capability not in model.capabilities or not model.enabled:
-        fail(422, "该模型未启用所选能力")
+    if body.capability not in model_capabilities(model, provider) or not model.enabled:
+        fail(422, "该模型未启用或不支持所选能力")
     return submit_probe(request, db, user, provider, model, body, "probe_model")
 
 

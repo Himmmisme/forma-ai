@@ -51,6 +51,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 
 图片工作台会把产品原图作为输入。OpenAI 及兼容协议需为工作台的生成模型勾选图片生成和图片编辑，并按模型文档填写规格。后台可按任务分别绑定模型。使用者在操作入口同意发送相关图片和需求后才发起外部调用。超管可以在系统设置中暂停外部 API，暂停期间仍可用 Mock。
 
+### VX API 图片模型
+
+服务商协议选择 `OpenAI Compatible`，Base URL 填 `https://la-api.vxvxvx.top/v1`。令牌开通 `gemini-nano-banana-2.1` 后，可在该服务商下添加此模型。勾选「图片生成」和「图片编辑」，将最大输入张数与最大生成张数均设为 `1`，图片规格可填 `1:1 | 1K 方图 | 1K`。在「任务默认模型」中将「图片生成」绑定到该模型，然后在工作台选择一张原图。分支修改同时使用父版本图和原图，需要另选支持多图编辑的模型。[VX API 接入文档](https://la-api.vxvxvx.top/manual/vx-api.html)
+
+`gpt-image-2.5` 和 `gpt-image-2.5-pro` 的文生图接口在 VX 文档中列为历史资料。对于仍有相应权限的令牌，Forma AI 的图片生成能力测试可按该历史请求格式提交。两款型号均缺少工作台使用原图所需的图像编辑能力。正式使用前，先核对当前令牌权限和模型分组，再由操作者确认实际调用。[VX API 接入文档](https://la-api.vxvxvx.top/manual/vx-api.html)
+
 ## 备份及恢复
 
 1. 超管打开「管理后台 → 系统日志及备份 → 整站备份」，创建并下载 ZIP。项目 ZIP 可独立交付给项目成员，实例恢复使用含 `manifest.json` 的完整快照。

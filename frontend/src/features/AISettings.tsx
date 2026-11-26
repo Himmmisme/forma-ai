@@ -61,7 +61,8 @@ export function AISettings() {
         const required = task === "generate" ? "image_generate" : task === "edit" ? "image_edit" : task === "optimize" ? "text" : "vision";
         const eligible = models.filter((model) => model.enabled && model.provider_enabled && model.protocol !== "mock"
           && model.capabilities.includes(required)
-          && (task !== "generate" || model.protocol === "gemini" || model.capabilities.includes("image_edit")));
+          && (task !== "generate" || model.protocol === "gemini" || model.capabilities.includes("image_edit"))
+          && (task !== "edit" || (model.max_inputs >= 2 && model.capabilities.includes("multi_image"))));
         return <Field key={key} label={label}><select value={bindings[task] ?? ""} disabled={bindingAction.busy}
           onChange={(event) => {
             const id = event.target.value;
@@ -149,7 +150,7 @@ function ModelEditor({ item, providers, close, saved }: Save & { item?: Model; p
           <input type="checkbox" name="capabilities" value={key} defaultChecked={item?.capabilities.includes(key as Capability)} />{label}
         </label>)}
       </div></fieldset>
-      <Field label="图片规格" hint="每行填写 比例 | 显示名 | API 参数。例 1:1 | 1024 × 1024 | 1024x1024。Gemini 使用模型支持的 imageSize，default 表示省略。">
+      <Field label="图片规格" hint="每行填写 比例 | 显示名 | API 参数。例 1:1 | 1024 × 1024 | 1024x1024。VX API 图片模型可用 1K。Gemini 官方使用模型支持的 imageSize，default 表示省略。">
         <textarea name="sizes" rows={4} defaultValue={item?.sizes.map((size) => `${size.ratio} | ${size.label} | ${size.value}`).join("\n")} />
       </Field>
       <div className="form-grid">
