@@ -84,3 +84,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 4. 打开 `http://localhost:8081/`，用备份中的账号重新登录。确认项目、图片、版本与方案后，安排切换入口。恢复项目的运维命令需继续使用 `-p forma-recovery` 和已选择的端口。
 
 本地 SQLite 环境也可使用 CLI。先退出目标服务，在 `backend` 目录为 `APP_DATA_DIR` 与 `APP_SECRET_DIR` 指定新的空目录，再执行 `..\.venv\Scripts\python.exe -m app.manage restore <快照路径>`。可以追加 `--key-file <密钥路径>`。日常 CLI 备份使用 `python -m app.manage backup <新ZIP路径>`，调用时传入源实例相同的数据库地址和文件目录。
+
+## 部署现场验收
+
+1. 在能运行 Linux 容器的 Windows 主机，用独立的测试实例执行 Docker 启动步骤。通过 `docker compose ps` 确认应用和数据库健康。
+2. 在同一局域网的另一台设备打开主机 IPv4 地址，登录测试账号，使用示例素材生成一版 Mock 成果并下载图片。
+3. 重启两个容器。再次确认健康状态、登录、项目、版本及图片下载。可对比重启前后下载图片的 SHA-256。
+4. 需要验证真实模型时，在部署环境确认已配置的型号与凭据，由操作者确认提交测试。

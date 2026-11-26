@@ -8,7 +8,7 @@
 | 4 | 迭代、版本分支、比较、收藏 | SQLite 和 PostgreSQL 各 11 项测试通过，覆盖多图独立版本、分支、重试、快照和 ZIP 导出；前端构建通过 |
 | 5 | 材料建议、价格、BOM、成本 | SQLite 和 PostgreSQL 各 13 项测试通过，覆盖选型方案、报价优先级、BOM、缺项、权限与 Excel；前端构建通过 |
 | 6 | UI 完善、异常处理、安全和自动化验收 | SQLite 和 PostgreSQL 各 15 项测试通过；Chromium 2 项端到端通过；npm 与 Python 运行依赖审计未报告已知漏洞 |
-| 7 | Docker、Windows 局域网、备份恢复与交付 | 已实现并验证 SQLite / PostgreSQL 整站恢复、原生 Windows 内网入口及进程重启。Compose 配置校验通过，容器启动因引擎缺失待验收 |
+| 7 | Docker、Windows 局域网、备份恢复与交付 | 本机验收通过，覆盖 SQLite / PostgreSQL 整站恢复、原生 Windows 重启和本机 WLAN IPv4 健康检查。容器运行和跨设备访问待现场验收 |
 
 从空工作区初始化。开发验证使用 Windows 便携 Git、Node.js、Python 与 PostgreSQL。真实 API 密钥由部署者配置。
 
@@ -20,4 +20,6 @@
 
 阶段 6 交付复验（2026-11-26）。任务执行前补校验项目访问权与源图片归属。SQLite 和 PostgreSQL 17 各 22 项后端测试通过，Chromium 和 WebKit 各 2 项端到端通过。Ruff 与前端生产构建通过。npm audit 和 pip-audit 对运行依赖未报告已知漏洞。
 
-部署阶段在 Windows 主机上执行了 Compose 配置检查和启动尝试。当前没有可用的 Docker 引擎。启用 Docker 的主机需补做容器启动、跨设备局域网连接和容器重启验收。真实服务需等待部署者配置凭据并测试能力。
+阶段 7 本机复验（2026-11-26）。用 `start-local.ps1 -Lan` 重启原生实例，回环与本机 WLAN IPv4 的健康检查均返回 HTTP 200，项目和任务记录可读取。隔离实例完成 Mock 生成和下载，重启后复用原登录会话，并核对了同一版本与成果图片的 SHA-256。Compose 5.8.0 配置和容器入口脚本语法检查通过。
+
+待现场验收的项目包括容器镜像构建、容器启动及重启、另一台局域网设备的访问和真实模型调用。本机固件虚拟化关闭，WSL 未启用，Docker 客户端无法连接引擎。VX 生图使用日志已报上游 HTTP 502，真实出图待服务恢复后由操作者确认验证。
