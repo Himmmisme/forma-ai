@@ -13,6 +13,7 @@ def make_engine(url: str) -> Engine:
     engine = create_engine(
         url,
         pool_pre_ping=True,
+        hide_parameters=True,
         connect_args={"check_same_thread": False, "timeout": 20} if sqlite else {"connect_timeout": 8},
     )
     if sqlite:
