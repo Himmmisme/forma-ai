@@ -44,8 +44,8 @@ export function RetryJob({ job, refresh }: { job: Job; refresh: () => void }) {
   </div>;
 }
 
-export function JobItem({ job, onPreview, refresh, children }: {
-  job: Job; onPreview?: (asset: Asset) => void; refresh: () => void; children?: ReactNode;
+export function JobItem({ job, onPreview, refresh, assetActions, children }: {
+  job: Job; onPreview?: (asset: Asset) => void; refresh: () => void; assetActions?: (index: number) => ReactNode; children?: ReactNode;
 }) {
   const [log, setLog] = useState(false);
   return <article className="job-item">
@@ -60,9 +60,11 @@ export function JobItem({ job, onPreview, refresh, children }: {
     {job.result?.summary && <div className="notice"><div>{job.result.summary}
       {job.result.uncertainties?.map((item, index) => <p key={index}>· {item}</p>)}</div></div>}
     {job.result?.assets && onPreview && <div className="job-image-grid">
-      {job.result.assets.map((asset) => <div key={asset.id} className="job-image">
+      {job.result.assets.map((asset, index) => <div key={asset.id} className="job-image">
         <button type="button" onClick={() => onPreview(asset)}><img loading="lazy" src={assetUrl(asset.id)} alt={asset.filename} /></button>
-        <a className="btn btn-ghost" href={assetUrl(asset.id, true)}><Download size={15} />下载</a>
+        <div className="actions job-image-actions">
+          <a className="btn btn-ghost" href={assetUrl(asset.id, true)}><Download size={15} />下载</a>{assetActions?.(index)}
+        </div>
       </div>)}
     </div>}
     {children}

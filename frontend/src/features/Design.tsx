@@ -1,31 +1,44 @@
-import { ImageIcon, ScanLine, SlidersHorizontal, Sparkles, WandSparkles } from "lucide-react";
-import { useState } from "react";
-import { api, useAction, useResource, useSubmission } from "../api";
-import type { Asset, Catalog, Job, Project } from "../types";
+import { GitBranch, ImageIcon, ListTree, ScanLine, SlidersHorizontal, Sparkles, WandSparkles } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { api, assetUrl, useAction, useResource, useSubmission } from "../api";
+import type { Asset, Catalog, Job, Project, VersionDetail } from "../types";
 import { Button, Empty, ErrorLine, Field, Loading, Modal } from "../ui";
 import { JobItem } from "./Jobs";
+import { VersionLinks, VersionParams, versionNumber } from "./Versions";
 
 interface PromptPreview { prompt: string; warnings: string[]; mock: boolean }
 
-export function DesignPanel({ project, assets, onPreview }: { project: Project; assets: Asset[]; onPreview: (asset: Asset) => void }) {
+interface DesignProps {
+  project: Project; assets: Asset[]; onPreview: (asset: Asset) => void;
+  sources: ReactNode; parentId?: string; clearParent: () => void;
+}
+export function DesignPanel({ parentId, ...props }: DesignProps) {
   const catalog = useResource<Catalog>("/design/catalog");
-  if (!catalog.data) return <><ErrorLine error={catalog.error} />{catalog.loading && <Loading />}</>;
-  return <DesignForm project={project} assets={assets} catalog={catalog.data} onPreview={onPreview} />;
+  const chosen = useResource<VersionDetail>(parentId ? `/versions/${parentId}` : null);
+  if (!catalog.data || chosen.loading) return <><ErrorLine error={catalog.error} />{(catalog.loading || chosen.loading) && <Loading />}</>;
+  const parent = chosen.data?.project_id === props.project.id && chosen.data.asset ? chosen.data : undefined;
+  return <>
+    {parentId && !parent && <div className="actions"><ErrorLine error={chosen.error ?? "无法使用此版本作为迭代输入"} />
+      <Button onClick={props.clearParent}>取消迭代输入</Button></div>}
+    <DesignForm key={parent?.id ?? "initial"} {...props} catalog={catalog.data} parent={parent} />
+  </>;
 }
 
-function DesignForm({ project, assets, catalog, onPreview }: { project: Project; assets: Asset[]; catalog: Catalog; onPreview: (asset: Asset) => void }) {
+function DesignForm({ project, assets, catalog, onPreview, sources, parent, clearParent }: Omit<DesignProps, "parentId"> & {
+  catalog: Catalog; parent?: VersionDetail;
+}) {
   const route = `/projects/${project.id}`;
   const jobs = useResource<Job[]>(`${route}/jobs?limit=15`, 1600);
   const action = useAction();
   const submit = useSubmission();
-  const [main, setMain] = useState("");
-  const [level, setLevel] = useState("");
+  const [main, setMain] = useState(parent?.configuration.templates.main.id ?? "");
+  const [level, setLevel] = useState(parent?.configuration.templates.level.id ?? "");
   const [auxiliary, setAuxiliary] = useState<string[]>([]);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [raw, setRaw] = useState("");
   const [optimized, setOptimized] = useState("");
   const [final, setFinal] = useState("");
-  const [constraints, setConstraints] = useState("");
+  const [constraints, setConstraints] = useState(parent?.configuration.constraints ?? "");
   const [modelId, setModelId] = useState("");
   const [ratio, setRatio] = useState("");
   const [size, setSize] = useState("");
@@ -35,27 +48,37 @@ function DesignForm({ project, assets, catalog, onPreview }: { project: Project;
   const [consent, setConsent] = useState(false);
   const [preview, setPreview] = useState<{ data: PromptPreview; send: boolean; body: object }>();
   const [optimization, setOptimization] = useState<Job>();
+  const [parameters, setParameters] = useState<string>();
+  const anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (parent?.id) anchor.current?.scrollIntoView({ block: "start" });
+  }, [parent?.id]);
 
   const directions = catalog.templates.filter((row) => row.kind === "direction");
   const levels = catalog.templates.filter((row) => row.kind === "level").sort((a, b) => a.slug.localeCompare(b.slug));
   const chosenMain = directions.find((row) => row.id === main) ?? directions[0];
   const chosenLevel = levels.find((row) => row.id === level) ?? levels.find((row) => row.slug === "l3");
-  const models = catalog.models.filter((row) => row.tasks?.includes("generate"));
-  const active = models.find((row) => row.id === (modelId || catalog.defaults.generate)) ?? models[0];
+  const task = parent ? "edit" : "generate";
+  const models = catalog.models.filter((row) => row.tasks?.includes(task));
+  const active = models.find((row) => row.id === (modelId || catalog.defaults[task])) ?? models[0];
   const ratios = [...new Set(active?.sizes.map((item) => item.ratio) ?? [])];
   const selectedRatio = ratios.includes(ratio) ? ratio : ratios[0];
   const sizes = active?.sizes.filter((item) => item.ratio === selectedRatio) ?? [];
   const spec = sizes.find((item) => item.value === size) ?? sizes[0];
-  const candidates = assets.filter((asset) => asset.kind === "original" || asset.kind === "reference");
+  const candidates = [...new Map([
+    ...(parent?.originals ?? []), ...(parent?.references ?? []),
+    ...assets.filter((asset) => asset.kind === "original" || asset.kind === "reference"),
+  ].map((asset) => [asset.id, asset])).values()];
   const originals = candidates.filter((row) => row.kind === "original" && !excluded.includes(row.id)).map((row) => row.id);
   const references = candidates.filter((row) => row.kind === "reference" && !excluded.includes(row.id)).map((row) => row.id);
   const external = active?.protocol !== "mock" || [catalog.defaults.optimize, catalog.defaults.inspect]
     .some((id) => catalog.models.some((row) => row.id === id && row.protocol !== "mock"));
-  const hasInputs = !!originals.length && !!chosenMain && !!chosenLevel && !!spec && originals.length + references.length <= (active?.max_inputs ?? 0);
+  const hasInputs = !!originals.length && !!chosenMain && !!chosenLevel && !!spec
+    && originals.length + references.length + Number(!!parent) <= (active?.max_inputs ?? 0);
 
   const body = {
     originals, references, main: chosenMain?.id, auxiliary: auxiliary.filter((id) => id !== chosenMain?.id),
-    level: chosenLevel?.id, raw, optimized, final, constraints, model_id: active?.id,
+    level: chosenLevel?.id, raw, optimized, final, constraints, model_id: active?.id, parent_id: parent?.id,
     output: { count: Math.min(count, active?.max_count ?? 1), ratio: selectedRatio, size: spec?.value, background, view },
   };
 
@@ -75,6 +98,15 @@ function DesignForm({ project, assets, catalog, onPreview }: { project: Project;
   return <>
     <div className="studio-grid">
       <div className="studio-inputs">
+        <div id="design-config" ref={anchor} />
+        {parent?.asset && <section className="panel form-stack">
+          <div className="split-row"><h2><GitBranch size={17} />当前迭代图片 · {versionNumber(parent.number)}</h2>
+            <Button variant="ghost" onClick={clearParent}>取消迭代</Button></div>
+          <button type="button" className="compare-image iteration-image" onClick={() => onPreview(parent.asset!)}>
+            <img src={assetUrl(parent.asset.id)} alt={`${versionNumber(parent.number)} 迭代输入`} /></button>
+          <p className="subtle compact">以当前版本的造型为基础，使用原图校对功能区域。</p>
+        </section>}
+        {sources}
         <section className="panel form-stack">
           <h2><SlidersHorizontal size={17} />设计方向</h2>
           <Field label="主执行方向" hint={chosenMain?.summary}>
@@ -119,8 +151,6 @@ function DesignForm({ project, assets, catalog, onPreview }: { project: Project;
             {(optimized || final) && <Button variant="ghost" onClick={() => { setOptimized(""); setFinal(""); }} disabled={disabled}>恢复原始需求</Button>}
           </div>
         </section>
-      </div>
-      <div className="studio-output">
         <section className="panel form-stack">
           <div className="split-row"><h2>输出设置</h2>{active?.protocol === "mock" && <span className="badge">Mock 模式</span>}</div>
           <Field label="图片模型"><select value={active?.id ?? ""} onChange={(event) => { setModelId(event.target.value); setRatio(""); setSize(""); }}
@@ -161,16 +191,23 @@ function DesignForm({ project, assets, catalog, onPreview }: { project: Project;
           {!hasInputs && <p className="subtle compact">请选择原图、有效模板和图片模型，并检查输入张数上限。</p>}
           <ErrorLine error={action.error} />
           <div className="actions">
-            <Button variant="primary" busy={action.busy && !preview} disabled={disabled || !hasInputs} onClick={() => promptPreview(true)}><Sparkles size={18} />生成设计</Button>
+            <Button variant="primary" busy={action.busy && !preview} disabled={disabled || !hasInputs} onClick={() => promptPreview(true)}><Sparkles size={18} />{parent ? "生成迭代版本" : "生成设计"}</Button>
             <Button disabled={disabled || !hasInputs} onClick={() => promptPreview(false)}>预览提示词</Button>
           </div>
         </section>
+      </div>
+      <div className="studio-output">
         <section className="panel output-panel">
-          <div className="section-heading"><h2>生成任务与成果</h2></div>
+          <div className="section-heading"><div><h2>生成任务与成果</h2><p>查看最近任务与新生成的设计版本。</p></div></div>
           <ErrorLine error={jobs.error} />
           {jobs.loading && <Loading />}
           {!jobs.loading && !jobs.data?.length && <Empty icon={<ImageIcon size={25} />} title="等待首个设计成果" description="提交设计后在这里查看队列状态、预览和下载。" />}
-          <div className="form-stack">{jobs.data?.map((job) => <JobItem key={job.id} job={job} onPreview={onPreview} refresh={jobs.refresh}>
+          <div className="form-stack">{jobs.data?.map((job) => <JobItem key={job.id} job={job} onPreview={onPreview} refresh={jobs.refresh}
+            assetActions={(index) => {
+              const id = job.result?.version_ids?.[index];
+              return id ? <><VersionLinks id={id} project={project.id} />
+                <Button variant="ghost" onClick={() => setParameters(id)}><ListTree size={15} />参数</Button></> : null;
+            }}>
             {job.result?.optimized && <Button onClick={() => setOptimization(job)}>查看优化结果</Button>}
           </JobItem>)}</div>
         </section>
@@ -187,6 +224,7 @@ function DesignForm({ project, assets, catalog, onPreview }: { project: Project;
     </Modal>}
     {optimization && <OptimizeResult initial={optimization} onClose={() => setOptimization(undefined)}
       onApply={(value) => { setOptimized(value); setFinal(value); setOptimization(undefined); }} />}
+    {parameters && <VersionParams id={parameters} onClose={() => setParameters(undefined)} />}
   </>;
 }
 

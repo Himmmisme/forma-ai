@@ -1,10 +1,11 @@
-import { Activity, Archive, Box, FolderOpen, ImageIcon, PencilLine, Plus, Search, Sparkles, Star, Trash2, Upload } from "lucide-react";
+import { Activity, Archive, Box, Download, FolderOpen, ImageIcon, PencilLine, Plus, Search, Sparkles, Star, Trash2, Upload } from "lucide-react";
 import { useId, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, assetUrl, dateTime, useAction, useResource } from "../api";
 import type { Asset, Dashboard, Project, ProjectList, User } from "../types";
 import { Button, Empty, ErrorLine, Field, Heading, IconButton, Loading, Modal, Preview } from "../ui";
 import { DesignPanel } from "./Design";
+import { HistoryPanel } from "./Versions";
 
 export function Overview({ user }: { user: User }) {
   const router = useNavigate();
@@ -149,12 +150,14 @@ export function ProjectStudio() {
 
 function StudioDetail({ project, assets, onChange }: { project: Project; assets: Asset[]; onChange: () => void }) {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const action = useAction();
   const [modal, setModal] = useState<"edit" | "trash">();
   const [preview, setPreview] = useState<Asset>();
   return <>
     <Heading title={project.name} description={project.description || "AI 设计工作台"}
       actions={<>
+        <a className="btn btn-secondary" href={`/api/projects/${project.id}/export`} target="_blank" rel="noreferrer"><Download size={16} />导出项目</a>
         <Button onClick={() => setModal("edit")}><PencilLine size={16} />编辑项目</Button>
         <Button busy={action.busy} onClick={() => void action.run(async () => {
           await api(`/projects/${project.id}`, "PATCH", { archived: !project.archived }); onChange();
@@ -163,13 +166,14 @@ function StudioDetail({ project, assets, onChange }: { project: Project; assets:
       </>} />
     <ErrorLine error={action.error} />
     {project.archived && <div className="notice">项目已归档。取消归档后可以添加素材。</div>}
-    <div className="project-sources">
+    <DesignPanel project={project} assets={assets} onPreview={setPreview} parentId={params.get("parent") ?? undefined}
+      clearParent={() => setParams({})} sources={<>
         <InputAssets label="产品原图" hint="上传产品的不同角度，用于识别功能区和整体形态。"
           kind="original" project={project} assets={assets} onChange={onChange} onPreview={setPreview} />
         <InputAssets label="设计参考图" hint="可选。用来参考材质、色彩或设计语言。"
           kind="reference" project={project} assets={assets} onChange={onChange} onPreview={setPreview} />
-    </div>
-    <DesignPanel project={project} assets={assets} onPreview={setPreview} />
+      </>} />
+    <HistoryPanel project={project.id} />
     {modal === "edit" && <ProjectEditor project={project} assets={assets} onClose={() => setModal(undefined)}
       onSaved={() => { setModal(undefined); onChange(); }} />}
     {modal === "trash" && <Modal title="移入回收站" onClose={() => setModal(undefined)}>

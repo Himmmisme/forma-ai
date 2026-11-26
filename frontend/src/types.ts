@@ -89,3 +89,21 @@ export interface Job {
   calls?: Call[];
   created_at: string; updated_at: string;
 }
+
+export interface Version {
+  id: string; project_id: string; user_id: string; parent_id: string | null; job_id: string;
+  number: number; favorite: boolean; created_at: string; status: Status; mock: boolean; asset: Asset | null;
+  direction: string; level: string; model_name: string; project_name?: string;
+}
+export interface VersionList { items: Version[]; more: boolean }
+export interface VersionDetail extends Version {
+  project_name: string; author: string; parent_number: number | null; originals: Asset[]; references: Asset[];
+  iteration: Asset | null; job: Job;
+  configuration: {
+    raw: string; optimized: string; final: string; constraints: string; prompt: string; warnings: string[];
+    provider: { id: string; name: string; protocol: Protocol; base_url: string };
+    model: { id: string; name: string; model_code: string; pricing: string };
+    templates: { base_revision: string; main: Template; auxiliary: Template[]; level: Template };
+    output: { count: number; ratio: string; size: string; background: string; view: string };
+  };
+}

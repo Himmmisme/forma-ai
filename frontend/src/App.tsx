@@ -1,17 +1,22 @@
-import { Box, FolderOpen, ImageIcon, LayoutDashboard, LogOut, Menu, Moon, Settings, Shield, Sun } from "lucide-react";
+import { Box, Columns2, FolderOpen, History, ImageIcon, LayoutDashboard, LogOut, Menu, Moon, Settings, Shield, Sparkles, Star, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, ApiError, message } from "./api";
 import { AccountPage, AuthScreen } from "./features/Accounts";
 import { AdminPage } from "./features/Admin";
 import { AssetLibrary, Overview, ProjectStudio, ProjectsPage } from "./features/Projects";
+import { ComparePage, FavoritesPage, HistoryPage, WorkbenchPage } from "./features/Versions";
 import { type User, roleNames } from "./types";
 import { Brand, Button, ErrorLine, IconButton, Loading } from "./ui";
 
 const navigation = [
   { to: "/", label: "概览", icon: LayoutDashboard },
   { to: "/projects", label: "我的项目", icon: FolderOpen },
+  { to: "/design", label: "AI 设计工作台", icon: Sparkles },
+  { to: "/history", label: "历史版本", icon: History },
+  { to: "/compare", label: "方案对比", icon: Columns2 },
   { to: "/assets", label: "素材库", icon: ImageIcon },
+  { to: "/favorites", label: "收藏方案", icon: Star },
 ];
 
 export function App() {
@@ -89,6 +94,10 @@ export function App() {
           <Route path="/" element={<Overview user={user} />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectStudio />} />
+          <Route path="/design" element={<WorkbenchPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/compare" element={<ComparePage />} />
+          <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/assets" element={<AssetLibrary />} />
           <Route path="/settings" element={<AccountPage user={user} onUser={setUser} />} />
           <Route path="/admin/*" element={isAdmin ? <AdminPage user={user} /> : <Navigate to="/" replace />} />
