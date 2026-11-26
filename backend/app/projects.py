@@ -37,7 +37,7 @@ def project_for(
     if not include_deleted:
         query = query.where(Project.deleted_at.is_(None))
     if lock:
-        query = query.with_for_update()
+        query = query.with_for_update(key_share=True)
     project = db.scalar(query)
     if not project:
         fail(404, "项目不存在")
@@ -226,7 +226,7 @@ def upload_asset(
     asset = store_image(data_dir, project_id, kind, file.filename, data)
     try:
         db.add(asset)
-        if not project.cover_id and kind == "original" or kind == "cover":
+        if (not project.cover_id and kind == "original") or kind == "cover":
             project.cover_id = asset.id
         project.updated_at = utcnow()
         db.commit()

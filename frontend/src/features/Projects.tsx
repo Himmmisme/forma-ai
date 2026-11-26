@@ -1,9 +1,10 @@
-import { Activity, Archive, Box, FolderOpen, ImageIcon, PencilLine, Plus, Search, Sparkles, Star, Trash2, Upload, Zap } from "lucide-react";
+import { Activity, Archive, Box, FolderOpen, ImageIcon, PencilLine, Plus, Search, Sparkles, Star, Trash2, Upload } from "lucide-react";
 import { useId, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, assetUrl, dateTime, useAction, useResource } from "../api";
 import type { Asset, Dashboard, Project, ProjectList, User } from "../types";
 import { Button, Empty, ErrorLine, Field, Heading, IconButton, Loading, Modal, Preview } from "../ui";
+import { DesignPanel } from "./Design";
 
 export function Overview({ user }: { user: User }) {
   const router = useNavigate();
@@ -162,17 +163,13 @@ function StudioDetail({ project, assets, onChange }: { project: Project; assets:
       </>} />
     <ErrorLine error={action.error} />
     {project.archived && <div className="notice">项目已归档。取消归档后可以添加素材。</div>}
-    <div className="studio-grid">
-      <div className="studio-inputs">
+    <div className="project-sources">
         <InputAssets label="产品原图" hint="上传产品的不同角度，用于识别功能区和整体形态。"
           kind="original" project={project} assets={assets} onChange={onChange} onPreview={setPreview} />
         <InputAssets label="设计参考图" hint="可选。用来参考材质、色彩或设计语言。"
           kind="reference" project={project} assets={assets} onChange={onChange} onPreview={setPreview} />
-      </div>
-      <div className="panel output-panel"><div className="section-heading"><h2>生成成果</h2></div>
-        <Empty icon={<Zap size={29} />} title="准备你的设计素材" description="添加至少一张产品原图。" />
-      </div>
     </div>
+    <DesignPanel project={project} assets={assets} onPreview={setPreview} />
     {modal === "edit" && <ProjectEditor project={project} assets={assets} onClose={() => setModal(undefined)}
       onSaved={() => { setModal(undefined); onChange(); }} />}
     {modal === "trash" && <Modal title="移入回收站" onClose={() => setModal(undefined)}>

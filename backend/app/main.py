@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from starlette.staticfiles import StaticFiles
 
-from app import auth, projects
+from app import auth, catalog, design, jobs, projects
 from app.config import Settings
 from app.db import make_engine, make_sessions
 from app.middleware import RequestGuard
@@ -21,8 +21,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         settings.data_dir.mkdir(parents=True, exist_ok=True)
-        yield
-        engine.dispose()
+        with app.state.sessions() as session:
+            catalog.seed_catalog(session)
+        scheduler = jobs.Scheduler(settings, app.state.sessions, app.state.write_lock)
+        app.state.scheduler = scheduler
+        if settings.worker_enabled:
+            scheduler.thread.start()
+        try:
+            yield
+        finally:
+            scheduler.stop.set()
+            if settings.worker_enabled:
+                scheduler.thread.join()
+            engine.dispose()
 
     app = FastAPI(
         title="Forma AI", version="1.0.0", lifespan=lifespan, docs_url=None, redoc_url=None,
@@ -49,7 +60,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             connection.execute(text("SELECT 1"))
         return {"status": "ok", "version": "1.0.0"}
 
-    for router in (auth.router, auth.admin_router, projects.router):
+    for router in (auth.router, auth.admin_router, projects.router, catalog.router, catalog.management,
+                   design.router, jobs.router):
         app.include_router(router, prefix="/api")
 
     if (settings.web_dir / "assets").is_dir():

@@ -1,11 +1,21 @@
 import { KeyRound, PencilLine, UserPlus, UsersRound } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, dateTime, useAction, useResource } from "../api";
 import { type User, roleNames } from "../types";
 import { Button, Empty, ErrorLine, Field, Heading, IconButton, Loading, Modal } from "../ui";
+import { AISettings, TemplatesPanel } from "./AISettings";
 
 export function AdminPage({ user }: { user: User }) {
-  return <><Heading title="管理后台" /><UsersPanel actor={user} /></>;
+  const [params, setParams] = useSearchParams();
+  const area = params.get("area") ?? "users";
+  const sections = [["users", "用户管理"], ["templates", "提示词模板"],
+    ...(user.role === "superadmin" ? [["ai", "API 服务商与模型"]] : [])];
+  return <><Heading title="管理后台" />
+    <div className="tabs">{sections.map(([key, label]) => <button key={key} className={area === key ? "active" : ""}
+      onClick={() => setParams({ area: key })}>{label}</button>)}</div>
+    {area === "ai" && user.role === "superadmin" ? <AISettings /> : area === "templates" ? <TemplatesPanel /> : <UsersPanel actor={user} />}
+  </>;
 }
 
 function UsersPanel({ actor }: { actor: User }) {

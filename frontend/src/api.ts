@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -75,4 +75,17 @@ export function dateTime(value?: string | null) {
 
 export function requestKey() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+export function useSubmission() {
+  const pending = useRef<{ path: string; body: string; key: string } | undefined>(undefined);
+  return async function submit<T>(path: string, body: object) {
+    const serialized = JSON.stringify(body);
+    if (!pending.current || pending.current.path !== path || pending.current.body !== serialized) {
+      pending.current = { path, body: serialized, key: requestKey() };
+    }
+    const result = await api<T>(path, "POST", { ...body, request_key: pending.current.key });
+    pending.current = undefined;
+    return result;
+  };
 }
