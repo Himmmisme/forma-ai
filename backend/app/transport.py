@@ -135,8 +135,11 @@ class SafeHTTP:
                     remote_id = response_id(response.headers)
                     if not response.is_success:
                         code = response.status_code
-                        reason = {401: "API Key 未获授权", 403: "服务商拒绝访问该资源",
-                                  404: "接口或模型不存在", 429: "达到服务商配额或速率限制"}.get(code, "上游请求失败")
+                        reason = {
+                            400: "请求参数、图片格式或所选模型能力不匹配", 401: "API Key 未获授权",
+                            403: "服务商拒绝访问该资源", 404: "接口或模型不存在", 413: "上游输入体积超限",
+                            422: "服务商拒绝处理所选输入", 429: "达到服务商配额或速率限制",
+                        }.get(code, "上游请求失败")
                         raise UpstreamError(f"{reason}（HTTP {code}）", status=code, request_id=remote_id)
                     if response.headers.get("content-encoding", "identity").lower() != "identity":
                         raise UpstreamError("上游响应使用了未支持的传输压缩")

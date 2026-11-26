@@ -1,8 +1,10 @@
 from datetime import date, datetime
 from io import BytesIO
 from typing import Annotated, Literal
+from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
 
+from defusedxml.common import DefusedXmlException
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from openpyxl import Workbook, load_workbook
@@ -140,7 +142,7 @@ def read_prices(raw: bytes):
             return items
         finally:
             book.close()
-    except (BadZipFile, OSError, KeyError, TypeError, ValueError):
+    except (BadZipFile, DefusedXmlException, ParseError, OSError, KeyError, TypeError, ValueError):
         fail(422, "无法读取 Excel，请提供标准 .xlsx 文件")
 
 

@@ -5,7 +5,8 @@ import { type Asset, type Call, type Job, statusNames, taskNames } from "../type
 import { Button, ErrorLine, Loading, Modal } from "../ui";
 
 export function JobStatus({ job }: { job: Job }) {
-  return <span className={`badge task-status status-${job.status}`}>{statusNames[job.status]}</span>;
+  const label = job.status === "running" && (job.kind === "generate" || job.kind === "edit") ? "生成中" : statusNames[job.status];
+  return <span className={`badge task-status status-${job.status}`}>{label}</span>;
 }
 
 export function CallsTable({ calls }: { calls: Call[] }) {

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters import ADAPTERS, ImageInput, mock_images, structured
 from app.auth import member
-from app.catalog import REAL_PROTOCOLS, Capability, get_model, get_provider
+from app.catalog import REAL_PROTOCOLS, Capability, external_enabled, get_model, get_provider
 from app.core import Input, audit, database, fail, json_fields
 from app.material_schema import MOCK_MATERIALS, MaterialData
 from app.models import Asset, CallLog, DesignVersion, Job, Model, Provider, User, utcnow
@@ -97,8 +97,11 @@ def existing_job(db, user, kind, key, digest):
 
 
 def enqueue(db, user, project, kind, body, digest, model, provider, payload):
-    if provider.protocol in REAL_PROTOCOLS and not body.ack_external:
-        fail(422, "请确认外部模型接收相关输入，调用可能产生费用")
+    if provider.protocol in REAL_PROTOCOLS:
+        if not external_enabled(db):
+            fail(423, "系统已暂停外部 API 调用")
+        if not body.ack_external:
+            fail(422, "请确认外部模型接收相关输入，调用可能产生费用")
     count = db.scalar(select(func.count()).select_from(Job).where(Job.user_id == user.id, Job.status.in_(ACTIVE)))
     if count >= 24:
         fail(429, "当前排队及运行任务较多，请等待后继续")
@@ -146,6 +149,8 @@ def retry_job(job_id: str, body: RetryInput, request: Request,
             fail(409, "只有失败的任务可重试")
         if previous.inputs["provider"]["protocol"] in REAL_PROTOCOLS and not body.ack_external:
             fail(422, "重试可能再次计费，请确认")
+        if previous.inputs["provider"]["protocol"] in REAL_PROTOCOLS and not external_enabled(db):
+            fail(423, "系统已暂停外部 API 调用")
         previous.status, previous.error, previous.lease_until = "queued", None, None
         previous.generation += 1
         audit(db, user, "job.retried", previous.id, attempt=previous.generation)
@@ -285,6 +290,8 @@ class Scheduler:
                     raise UpstreamError("任务创建者的账号或权限已停用")
                 if not provider.enabled or model and not model.enabled:
                     raise UpstreamError("服务商或模型已停用")
+                if provider.protocol in REAL_PROTOCOLS and not external_enabled(db):
+                    raise UpstreamError("系统已暂停外部 API 调用")
                 if provider.base_url != job.inputs["provider"]["base_url"]:
                     raise UpstreamError("服务商地址已改变，请提交新的任务")
                 key = unseal(self.settings.secret_dir, provider.key_encrypted) if provider.protocol != "mock" else None
@@ -348,10 +355,12 @@ class Scheduler:
         buffer = io.BytesIO()
         Image.new("RGB", (320, 320), "#79a687").save(buffer, "PNG")
         image = ImageInput("image/png", buffer.getvalue())
-        if capability in {"image_generate", "image_edit"}:
+        image_protocol = inputs["model"]["capabilities"]
+        if capability in {"image_generate", "image_edit"} or capability == "multi_image" and "image_edit" in image_protocol:
             spec = inputs["sizes"][0]
+            samples = [image, image] if capability == "multi_image" else [image] if capability == "image_edit" else []
             results = await adapter.images(model, "Render a simple green industrial enclosure.",
-                                           [image] if capability == "image_edit" else [],
+                                           samples,
                                            {"count": 1, "ratio": spec["ratio"], "size": spec["value"]})
             if not results:
                 raise UpstreamError("模型没有返回图像")

@@ -6,17 +6,19 @@ import { type User, roleNames } from "../types";
 import { Button, Empty, ErrorLine, Field, Heading, IconButton, Loading, Modal } from "../ui";
 import { AISettings, TemplatesPanel } from "./AISettings";
 import { PricesPanel } from "./Prices";
+import { SystemPanel } from "./System";
 
 export function AdminPage({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const area = params.get("area") ?? "users";
   const sections = [["users", "用户管理"], ["templates", "提示词模板"], ["prices", "材料价格库"],
-    ...(user.role === "superadmin" ? [["ai", "API 服务商与模型"]] : [])];
+    ...(user.role === "superadmin" ? [["ai", "API 服务商与模型"], ["system", "系统日志及备份"]] : [])];
   return <><Heading title="管理后台" />
     <div className="tabs">{sections.map(([key, label]) => <button key={key} className={area === key ? "active" : ""}
       onClick={() => setParams({ area: key })}>{label}</button>)}</div>
     {area === "ai" && user.role === "superadmin" ? <AISettings /> : area === "templates" ? <TemplatesPanel /> :
-      area === "prices" ? <PricesPanel /> : <UsersPanel actor={user} />}
+      area === "prices" ? <PricesPanel /> : area === "system" && user.role === "superadmin" ? <SystemPanel /> :
+        <UsersPanel actor={user} />}
   </>;
 }
 

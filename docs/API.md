@@ -12,3 +12,37 @@ API 使用同源 JSON、Cookie 会话及后台权限校验。修改请求带 `X-
 | 账户、API、提示词、价格库及系统 | `/api/admin` |
 
 业务错误使用可阅读的 `detail`。新任务携带幂等键。文件以身份认证请求读取。在线路由详情由 FastAPI OpenAPI 提供。
+
+以下路径以 `/api` 开头。应用提供 `GET /api/openapi.json`。
+
+| 路径 | HTTP 方法与行为 |
+| --- | --- |
+| `/health` | GET 检查应用与数据库连接 |
+| `/auth/setup` | GET 初始化状态，POST 验证令牌并创建首个超管 |
+| `/auth/login`、`/auth/logout` | POST 登录或撤销会话 |
+| `/auth/me`、`/auth/password` | GET / PATCH 本人资料，POST 修改密码 |
+| `/dashboard` | GET 本人汇总 |
+| `/projects`、`/projects/demo` | GET 搜索、收藏与状态分页，POST 创建项目或载入示例 |
+| `/projects/{id}`、`/projects/{id}/restore` | GET 详情，PATCH 基本信息和状态，DELETE 移入回收站，POST 恢复 |
+| `/projects/{id}/assets` | GET 素材列表，POST multipart 单文件上传，`kind` 为 original、reference 或 cover |
+| `/assets/{id}/content`、`/assets/{id}` | GET 预览，添加 `download=true` 下载，DELETE 移除输入 |
+| `/design/catalog` | GET 可用模板、模型、输出规格和默认模型 |
+| `/projects/{id}/preview`、`/projects/{id}/generate` | POST 预览提示词或入队生成，携带 `parent_id` 进入修改任务 |
+| `/projects/{id}/optimize`、`/projects/{id}/inspect` | POST 需求优化或原图理解 |
+| `/projects/{id}/jobs`、`/jobs/{id}`、`/jobs/{id}/retry` | GET 任务和请求记录，POST 重试 |
+| `/projects/{id}/versions`、`/versions/{id}` | GET 版本列表或完整记录，PATCH 收藏 |
+| `/projects/{id}/comparison-options`、`/favorites` | GET 比较数据或收藏成果 |
+| `/projects/{id}/export` | GET 项目 ZIP。项目中的任务完成后可下载 |
+| `/versions/{id}/analysis` | GET 材料、成本及任务，POST 入队分析 |
+| `/versions/{id}/materials`、`/versions/{id}/materials/{plan}` | POST 新方案，PUT 编辑方案 |
+| `/versions/{id}/costs`、`/versions/{id}/costs/{plan}`、`/versions/{id}/costs/calculate` | POST 保存或预计算、PUT 更新重算 |
+| `/material-prices` | GET 按材料、牌号或供应商搜索报价 |
+| `/admin/users`、`/admin/users/{id}`、`/admin/users/{id}/password` | GET / POST 创建与查询、PATCH 管理、POST 重置 |
+| `/admin/catalog`、`/admin/providers`、`/admin/models`、`/admin/bindings/{task}` | 超管查看、创建或修改配置，PUT 更新指定默认模型 |
+| `/admin/providers/{id}/test`、`/admin/models/{id}/test` | POST 入队连接或能力测试 |
+| `/admin/templates`、`/admin/templates/{id}` | GET 列表、POST 创建方向、PUT 更新模板 |
+| `/admin/prices`、`/admin/prices/{id}`、`/admin/prices/import`、`/admin/prices/export` | POST / PUT 保存、POST 导入 .xlsx、GET 导出或模板 |
+| `/admin/system`、`/admin/audit`、`/admin/calls` | GET / PUT 设置，GET 操作和 API 调用记录 |
+| `/admin/backups`、`/admin/backups/{id}/download` | GET 列表、POST 创建完整快照、GET 下载 |
+
+`request_key` 由客户端生成。相同任务种类和幂等键仅接受同一组业务参数。提交返回任务 ID，状态为 queued、running、succeeded 或 failed。发送设计输入给外部服务须提供 `ack_external`，已知提示词冲突须提供 `ack_conflicts`。普通用户请求他人项目、素材和版本时返回 404。

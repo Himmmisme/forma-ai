@@ -8,6 +8,10 @@
 | 4 | 迭代、版本分支、比较、收藏 | SQLite 和 PostgreSQL 各 11 项测试通过，覆盖多图独立版本、分支、重试、快照和 ZIP 导出；前端构建通过 |
 | 5 | 材料建议、价格、BOM、成本 | SQLite 和 PostgreSQL 各 13 项测试通过，覆盖选型方案、报价优先级、BOM、缺项、权限与 Excel；前端构建通过 |
 | 6 | UI 完善、异常处理、安全和自动化验收 | SQLite 和 PostgreSQL 各 15 项测试通过；Chromium 2 项端到端通过；npm 与 Python 运行依赖审计未报告已知漏洞 |
-| 7 | Docker、Windows 局域网、备份恢复与交付 | 进行中 |
+| 7 | Docker、Windows 局域网、备份恢复与交付 | 已实现并验证 SQLite / PostgreSQL 整站恢复、原生 Windows 内网入口及进程重启。Compose 配置校验通过，容器启动因引擎缺失待验收 |
 
 从空工作区初始化。开发验证使用 Windows 便携 Git、Node.js、Python 与 PostgreSQL。真实 API 密钥由部署者配置。
+
+最终验收包含 SQLite 与 PostgreSQL 各 17 项后端测试和 Chromium、WebKit 各 2 项端到端测试。完整报告见 [测试与验收](TEST.md)。
+
+部署阶段在 Windows 主机上执行了 Compose 配置检查和启动尝试。当前没有可用的 Docker 引擎。启用 Docker 的主机需补做容器启动、跨设备局域网连接和容器重启验收。真实服务需等待部署者配置凭据并测试能力。

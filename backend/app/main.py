@@ -1,17 +1,18 @@
 from contextlib import asynccontextmanager
-from threading import RLock
+from threading import Lock, RLock
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.exc import IntegrityError
 from starlette.staticfiles import StaticFiles
 
-from app import analysis, auth, catalog, design, jobs, prices, projects, versions
+from app import analysis, auth, catalog, design, jobs, prices, projects, system, versions
 from app.config import Settings
 from app.db import make_engine, make_sessions
 from app.middleware import RequestGuard
+from app.models import Backup
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -23,6 +24,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         with app.state.sessions() as session:
             catalog.seed_catalog(session)
+            session.execute(update(Backup).where(Backup.status == "running")
+                            .values(status="failed", error="服务重启，备份已中断，可重新创建。"))
+            session.commit()
         scheduler = jobs.Scheduler(settings, app.state.sessions, app.state.write_lock)
         app.state.scheduler = scheduler
         if settings.worker_enabled:
@@ -43,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.sessions = make_sessions(engine)
     app.state.write_lock = RLock()
+    app.state.backup_lock = Lock()
     app.add_middleware(RequestGuard)
 
     @app.exception_handler(RequestValidationError)
@@ -62,7 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok", "version": "1.0.0"}
 
     for router in (auth.router, auth.admin_router, projects.router, catalog.router, catalog.management,
-                   design.router, jobs.router, versions.router, analysis.router, prices.router):
+                   design.router, jobs.router, versions.router, analysis.router, prices.router, system.router):
         app.include_router(router, prefix="/api")
 
     if (settings.web_dir / "assets").is_dir():
@@ -74,7 +79,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "接口不存在")
         if page in {"forma-product.webp", "forma-mark.png"} and (settings.web_dir / page).is_file():
             return FileResponse(settings.web_dir / page)
-        if (settings.web_dir / "index.html").is_file() and "text/html" in request.headers.get("Accept", ""):
+        if (settings.web_dir / "index.html").is_file() and (
+            not page or "text/html" in request.headers.get("Accept", "")
+        ):
             return FileResponse(settings.web_dir / "index.html", headers={"Cache-Control": "no-cache"})
         raise HTTPException(404, "页面不存在")
 

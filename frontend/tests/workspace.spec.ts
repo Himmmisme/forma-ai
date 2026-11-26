@@ -64,6 +64,13 @@ test("first-run, Mock designs, branch, comparison, materials, BOM and administra
   await page.getByRole("button", { name: "连接测试", exact: true }).click();
   await page.getByRole("button", { name: "运行测试" }).click();
   await expect(page.getByText("Mock 连接成功")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "关闭" }).click();
+  await page.getByRole("button", { name: "系统日志及备份" }).click();
+  await page.getByRole("button", { name: "创建完整备份" }).click();
+  await expect(page.getByText("完整备份已创建")).toBeVisible();
+  const snapshot = page.waitForEvent("download");
+  await page.getByRole("link", { name: "下载备份" }).click();
+  expect((await snapshot).suggestedFilename()).toMatch(/forma-[a-f0-9]{32}\.zip/);
   expect(pageErrors).toEqual([]);
 });
 

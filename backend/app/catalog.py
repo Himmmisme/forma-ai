@@ -128,15 +128,23 @@ def can_serve(model: Model, provider: Provider, task: str) -> bool:
     return True
 
 
+def external_enabled(db: Session) -> bool:
+    state = db.get(Setting, "runtime")
+    return state.value.get("external_enabled", True) if state else True
+
+
 def choose_model(db: Session, task: str, model_id: str | None = None):
     binding = db.get(ModelBinding, task)
-    if model_id is None:
+    remote = external_enabled(db)
+    if model_id is None and remote:
         model_id = binding.model_id if binding else None
     query = select(Model, Provider).join(Provider)
     query = query.where(Model.id == model_id) if model_id else query.where(Provider.protocol == "mock")
     row = db.execute(query).first()
     if not row or not can_serve(*row, task):
         fail(422, "未找到启用并支持该任务的模型")
+    if not remote and row[1].protocol != "mock":
+        fail(423, "系统已暂停外部 API 调用")
     return row[0], row[1]
 
 
@@ -161,12 +169,15 @@ def public_catalog(db: Session = Depends(database), _: User = Depends(member)):
     )).all()
     rows = db.execute(select(Model, Provider).where(Model.enabled, Provider.enabled).join(Provider)
                       .order_by(Provider.protocol, Model.name)).all()
+    remote = external_enabled(db)
+    if not remote:
+        rows = [row for row in rows if row[1].protocol == "mock"]
     defaults = {binding.task: binding.model_id for binding in db.scalars(select(ModelBinding))}
     mock = next((model.id for model, provider in rows if provider.protocol == "mock"), None)
     models = [{**model_view(model, provider), "tasks": [task for task in TASK_CAP if can_serve(model, provider, task)]}
               for model, provider in rows]
     return {"templates": [template_view(row) for row in templates], "models": models,
-            "defaults": {task: defaults.get(task, mock) for task in TASK_CAP}}
+            "defaults": {task: defaults.get(task, mock) if remote else mock for task in TASK_CAP}}
 
 
 @management.get("/catalog")

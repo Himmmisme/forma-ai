@@ -1,0 +1,15 @@
+.git
+.env
+.venv
+.runtime
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+backend/tests
+docs
+*.sqlite*
+*.log

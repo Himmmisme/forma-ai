@@ -11,3 +11,7 @@ UI 使用自有 CSS 设计变量和可复用组件，Lucide 提供应用图标�
 OpenAI 官方文本与视觉走 Responses，图片工作台将多角度素材传给 Images Edits。兼容协议使用 Chat Completions 和 Images，具体支持范围由能力测试确认。Gemini 使用 generateContent 的 inlineData 和 generationConfig，每个输出发起一次调用。管理后台由部署者填写已开通的模型 ID。参见 [OpenAI Images Edits](https://developers.openai.com/api/reference/resources/images/methods/edit/)和 [Gemini GenerateContent](https://aistudio.google.com/api-reference/generate-content/generate-content)。
 
 外部请求仅使用 HTTPS，禁用重定向和系统代理。解析到的地址均须为公网地址，连接固定在已验证的 IP，并用原始域名验证 TLS。预签名图片地址按相同规则访问，下载请求不携带服务商凭据。
+
+任务执行器在单个 Web 进程内运行，PostgreSQL 队列取用行锁及 `SKIP LOCKED`；并发按全局槽位和服务商设置限制。执行线程每 8 秒更新租约，40 秒未更新的运行任务可标记为中断。计划内停机等待执行线程，上游接收情况不明时保留调用记录并由用户重试。SQLite 是本地单进程模式。
+
+备份从一致性读快照提取业务表，图片对象不可变且在事务提交前写入。备份将清单与已校验的图片打包，独立保管凭据解密密钥。恢复到空实例保留账号和所有业务记录，登录会话由应用重新创建。

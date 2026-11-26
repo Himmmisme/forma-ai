@@ -2,6 +2,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlalchemy import URL
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -21,8 +23,15 @@ class Settings:
     def from_env(cls) -> "Settings":
         data = Path(os.getenv("APP_DATA_DIR", str(ROOT / ".runtime" / "data"))).resolve()
         web = Path(os.getenv("APP_WEB_DIR", str(ROOT / "frontend" / "dist"))).resolve()
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url and (host := os.getenv("APP_DB_HOST")):
+            database_url = URL.create(
+                "postgresql+psycopg", username=os.getenv("APP_DB_USER", "forma"),
+                password=os.getenv("APP_DB_PASSWORD"), host=host, port=5432,
+                database=os.getenv("APP_DB_NAME", "forma"),
+            ).render_as_string(hide_password=False)
         return cls(
-            database_url=os.getenv("DATABASE_URL", f"sqlite:///{(data / 'forma.sqlite3').as_posix()}"),
+            database_url=database_url or f"sqlite:///{(data / 'forma.sqlite3').as_posix()}",
             data_dir=data,
             secret_dir=Path(os.getenv("APP_SECRET_DIR", str(ROOT / ".runtime" / "secrets"))).resolve(),
             web_dir=web,

@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forma
+      POSTGRES_USER: forma
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Run scripts/start.ps1 first}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forma -d forma"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+    stop_grace_period: 30s
+  app:
+    build: .
+    image: forma-ai:1.0.0
+    restart: unless-stopped
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:8000"
+    environment:
+      APP_DB_HOST: db
+      APP_DB_USER: forma
+      APP_DB_NAME: forma
+      APP_DB_PASSWORD: "${POSTGRES_PASSWORD:?Run scripts/start.ps1 first}"
+      APP_SETUP_TOKEN: "${APP_SETUP_TOKEN:?Run scripts/start.ps1 first}"
+      APP_COOKIE_SECURE: "${APP_COOKIE_SECURE:-0}"
+      APP_WORKER_SLOTS: "${APP_WORKER_SLOTS:-4}"
+    volumes:
+      - files_data:/var/lib/forma/data
+      - instance_secrets:/var/lib/forma/secrets
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).close()"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+      start_period: 15s
+    stop_grace_period: 45s
+
+volumes:
+  postgres_data:
+  files_data:
+  instance_secrets:

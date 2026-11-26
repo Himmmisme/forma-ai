@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, assetUrl, dateTime, useAction, useResource } from "../api";
 import { type Asset, type Version, type VersionDetail, type VersionList, statusNames } from "../types";
 import { Button, Empty, ErrorLine, Field, Heading, IconButton, Loading, Modal, Preview } from "../ui";
-import { CallsTable } from "./Jobs";
+import { CallsTable, RetryJob } from "./Jobs";
 import { ProjectSelect } from "./Projects";
 
 export function versionNumber(number: number) {
@@ -132,6 +132,7 @@ export function VersionParams({ id, onClose }: { id: string; onClose: () => void
         "保留约束": config.constraints, "实际发送提示词": config.prompt }).map(([label, value]) =>
         <details key={label} open={label === "实际发送提示词"}><summary>{label}</summary><pre className="text-preview">{value || "—"}</pre></details>)}
       <h3>调用记录</h3><ErrorLine error={version.job.error ?? undefined} /><CallsTable calls={version.job.calls ?? []} />
+      <RetryJob job={version.job} refresh={resource.refresh} />
       {version.asset && <div className="actions">
         <a className="btn btn-secondary" href={assetUrl(version.asset.id, true)}><Download size={16} />下载原始成果</a>
       </div>}
