@@ -14,6 +14,9 @@ export async function api<T>(path: string, method = "GET", body?: object, option
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 401 && !path.startsWith("/auth/")) {
+      window.dispatchEvent(new Event("forma-session-expired"));
+    }
     throw new ApiError(typeof payload.detail === "string" ? payload.detail : "请求失败，请稍后重试", response.status);
   }
   return response.status === 204 ? undefined as T : response.json();
@@ -55,12 +58,15 @@ export function useResource<T>(path: string | null, pollMs = 0) {
 export function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const inFlight = useRef(false);
   async function run(action: () => Promise<unknown>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError("");
     setBusy(true);
     try { await action(); }
     catch (exception) { setError(message(exception)); }
-    finally { setBusy(false); }
+    finally { inFlight.current = false; setBusy(false); }
   }
   return { run, busy, error, setError };
 }

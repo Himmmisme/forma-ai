@@ -94,7 +94,9 @@ class OpenAIAdapter(RemoteAdapter):
     async def images(self, model, prompt, images, output):
         fields = {"model": model, "prompt": prompt, "size": output["size"], "n": str(output["count"])}
         if images:
-            files = [("image[]", (f"input-{index}", image.data, image.mime)) for index, image in enumerate(images)]
+            extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+            files = [("image[]", (f"input-{index}.{extension[image.mime]}", image.data, image.mime))
+                     for index, image in enumerate(images)]
             data = await self.json("images.edits", "/images/edits", data=fields, files=files)
         else:
             data = await self.json("images.generations", "/images/generations", json={**fields, "n": output["count"]})

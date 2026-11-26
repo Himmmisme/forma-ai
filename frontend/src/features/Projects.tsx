@@ -237,11 +237,20 @@ export function InputAssets({ label, hint, kind, project, assets, onChange, onPr
 }
 
 export function ProjectSelect({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
-  const projects = useResource<ProjectList>("/projects?status=all&limit=100");
-  return <><Field label="选择项目"><select value={selected} onChange={(event) => onSelect(event.target.value)}>
-    <option value="">请选择</option>
-    {projects.data?.items.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-  </select></Field><ErrorLine error={projects.error} /></>;
+  const [offset, setOffset] = useState(0);
+  const projects = useResource<ProjectList>(`/projects?status=all&limit=100&offset=${offset}`);
+  const absent = selected && !projects.data?.items.some((project) => project.id === selected);
+  const current = useResource<Project>(absent ? `/projects/${selected}` : null);
+  return <div className="form-stack">
+    <Field label="选择项目"><select value={selected} onChange={(event) => onSelect(event.target.value)}>
+      <option value="">请选择</option>
+      {absent && <option value={selected}>{current.data?.name ?? "当前项目"}</option>}
+      {projects.data?.items.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+    </select></Field>
+    {(offset > 0 || projects.data?.more) && <div className="actions"><Button disabled={!offset} onClick={() => setOffset(offset - 100)}>上一组</Button>
+      <Button disabled={!projects.data?.more} onClick={() => setOffset(offset + 100)}>下一组</Button></div>}
+    <ErrorLine error={projects.error} />
+  </div>;
 }
 
 export function AssetLibrary() {

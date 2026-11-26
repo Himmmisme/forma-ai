@@ -11,7 +11,7 @@ from time import monotonic
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from PIL import Image
 from pydantic import Field, ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from app.adapters import ADAPTERS, ImageInput, mock_images, structured
@@ -32,6 +32,8 @@ CALL_FIELDS = ("id", "generation", "operation", "status", "request_id", "http_st
                "elapsed_ms", "usage", "created_at")
 IMAGE_TASKS = {"generate", "edit"}
 ACTIVE = {"queued", "running"}
+LEASE_SECONDS = 40
+HEARTBEAT_SECONDS = 8
 
 
 class JobRequest(Input):
@@ -213,17 +215,27 @@ class Scheduler:
 
     def loop(self):
         with ThreadPoolExecutor(max_workers=self.settings.worker_slots, thread_name_prefix="forma-task") as pool:
-            pending = set()
+            pending = {}
+            heartbeat_at = monotonic()
             while not self.stop.is_set():
-                pending = {future for future in pending if not future.done()}
-                if len(pending) < self.settings.worker_slots:
-                    try:
+                pending = {key: future for key, future in pending.items() if not future.done()}
+                try:
+                    if pending and monotonic() >= heartbeat_at:
+                        self.heartbeat(list(pending))
+                        heartbeat_at = monotonic() + HEARTBEAT_SECONDS
+                    if len(pending) < self.settings.worker_slots:
                         if info := self.claim():
-                            pending.add(pool.submit(self.execute, *info))
+                            pending[info] = pool.submit(self.execute, *info)
                             continue
-                    except Exception:
-                        logger.warning("Task claim unavailable")
+                except Exception:
+                    logger.warning("Task queue database unavailable")
                 self.stop.wait(.65)
+
+    def heartbeat(self, leases):
+        with self.sessions.begin() as db:
+            db.execute(update(Job).where(Job.status == "running", tuple_(Job.id, Job.generation).in_(leases))
+                       .values(lease_until=utcnow() + timedelta(seconds=LEASE_SECONDS),
+                               updated_at=Job.updated_at))
 
     def claim(self):
         with self.lock, self.sessions.begin() as db:
@@ -254,16 +266,18 @@ class Scheduler:
             )).order_by(Job.created_at, Job.id).limit(1).with_for_update(skip_locked=True))
             if not job:
                 return None
-            provider = next(row for row in available if row.id == job.provider_id)
-            count = job.inputs.get("output", {}).get("count", 1)
             job.status = "running"
-            job.lease_until = now + timedelta(seconds=(1 + count) * provider.timeout + 90)
+            job.lease_until = now + timedelta(seconds=LEASE_SECONDS)
             return job.id, job.generation
 
     def execute(self, identifier, generation):
         try:
             with self.sessions() as db:
                 job = db.get(Job, identifier)
+                if not job or job.status != "running" or job.generation != generation:
+                    return
+                if job.lease_until < utcnow():
+                    raise UpstreamError("任务租约已过期，请重试")
                 provider = db.get(Provider, job.provider_id)
                 model = db.get(Model, job.model_id) if job.model_id else None
                 user = db.get(User, job.user_id)
@@ -277,7 +291,10 @@ class Scheduler:
                 images = []
                 for asset_id in job.inputs.get("asset_ids", []):
                     asset = db.get(Asset, asset_id)
-                    data = asset_path(self.settings.data_dir, asset_id).read_bytes()
+                    try:
+                        data = asset_path(self.settings.data_dir, asset_id).read_bytes()
+                    except OSError as error:
+                        raise UpstreamError("任务源图片缺失或无法读取，请检查项目存储") from error
                     images.append(ImageInput(asset.mime, data))
                 db.expunge_all()
             result = asyncio.run(self.perform(job, provider, key, images))

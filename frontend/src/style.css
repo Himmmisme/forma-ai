@@ -182,6 +182,7 @@ input[type="checkbox"], input[type="range"], input[type="radio"] { accent-color:
 .ellipsize { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toolbar { display: flex; gap: 10px; justify-content: space-between; align-items: end; flex-wrap: wrap; }
 .toolbar .field { min-width: min(100%, 190px); }
+.toolbar > .form-stack { min-width: min(100%, 260px); }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-subtle); width: fit-content; }
 .tabs button, .tabs a { padding: 7px 11px; border: 1px solid transparent; border-radius: 6px; background: transparent; font-size: .875rem; color: var(--muted); }
 .tabs .active { background: var(--panel); color: var(--ink); border-color: var(--line); font-weight: 700; }
@@ -256,6 +257,9 @@ fieldset { padding: 10px; min-width: 0; border: 1px solid var(--line); border-ra
 .cost-metrics small { color: var(--muted); }
 .cost-metrics strong { font-size: 1.25rem; overflow-wrap: anywhere; }
 td small.cost-missing { color: var(--warning); }
+@media (min-width: 931px) {
+  .studio-output { position: sticky; top: 77px; max-height: calc(100dvh - 92px); overflow: auto; }
+}
 @media (max-width: 1140px) {
   .project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

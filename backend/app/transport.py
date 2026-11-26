@@ -12,6 +12,7 @@ from app.core import fail
 
 OFFICIAL = {"openai": "https://api.openai.com/v1", "gemini": "https://generativelanguage.googleapis.com/v1beta"}
 MAX_RESPONSE = 80 * 1024 * 1024
+IPV6_TRANSLATION = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("64:ff9b:1::/48"))
 
 
 class UpstreamError(Exception):
@@ -28,7 +29,7 @@ def fixed_endpoint(protocol: str) -> str | None:
 def public_ip(address: str) -> bool:
     ip = ipaddress.ip_address(address)
     if isinstance(ip, ipaddress.IPv6Address):
-        if ip.ipv4_mapped or ip.sixtofour or ip.teredo:
+        if ip.ipv4_mapped or ip.sixtofour or ip.teredo or any(ip in net for net in IPV6_TRANSLATION):
             return False
     return ip.is_global and not (ip.is_multicast or ip.is_reserved or ip.is_unspecified or ip.is_link_local)
 

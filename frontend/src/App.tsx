@@ -41,6 +41,11 @@ export function App() {
     return () => { active = false; };
   }, []);
   useEffect(() => { setDrawer(false); window.scrollTo(0, 0); }, [location.pathname]);
+  useEffect(() => {
+    const expire = () => setUser(null);
+    window.addEventListener("forma-session-expired", expire);
+    return () => window.removeEventListener("forma-session-expired", expire);
+  }, []);
 
   async function signOut() {
     try { await api("/auth/logout", "POST"); setUser(null); }

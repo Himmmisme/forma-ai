@@ -47,7 +47,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, exc: RequestValidationError):
-        fields = [".".join(map(str, item["loc"][1:])) or "输入" for item in exc.errors()[:8]]
+        fields = ["未知字段" if item["type"] == "extra_forbidden" else
+                  (".".join(map(str, item["loc"][1:])) or "输入") for item in exc.errors()[:8]]
         return JSONResponse({"detail": "请检查字段格式或长度 · " + "、".join(fields)}, status_code=422)
 
     @app.exception_handler(IntegrityError)
