@@ -1,0 +1,13 @@
+fastapi>=0.136,<1
+uvicorn>=0.40,<1
+sqlalchemy>=2.0.45,<2.1
+alembic>=1.18,<2
+psycopg[binary]>=3.2.10,<4
+pydantic>=2.12,<3
+python-multipart>=0.0.22,<1
+argon2-cffi>=25.1,<26
+cryptography>=46,<49
+httpx>=0.28.1,<0.29
+pillow>=12.1,<14
+openpyxl>=3.1.5,<4
+defusedxml>=0.7.1,<1

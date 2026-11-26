@@ -1,0 +1,46 @@
+:root {
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC", system-ui, sans-serif;
+  color: #212923;
+  background: #f4f6f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --canvas: #f4f6f2;
+  --panel: #fff;
+  --panel-subtle: #f2f5ef;
+  --line: #dfe5db;
+  --ink: #212923;
+  --muted: #58655c;
+  --accent: #d9eeac;
+  --accent-ink: #25351c;
+  --deep: #19221c;
+  --green: #42623f;
+  --danger: #a62d30;
+  --warning: #80560d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, select, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+h1, h2, h3, p { margin: 0; }
+a { color: inherit; }
+img { display: block; max-width: 100%; }
+.subtle { color: var(--muted); }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 760; letter-spacing: -.045em; }
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.auth-layout { min-height: 100dvh; display: grid; grid-template-columns: minmax(360px, .9fr) 1.1fr; }
+.auth-panel { width: min(100% - 48px, 400px); margin: auto; display: grid; gap: 20px; padding-block: 50px; }
+.auth-panel h1 { font-size: clamp(28px, 3vw, 42px); letter-spacing: -.04em; }
+.auth-visual { background: #161c18 url("/forma-product.webp") center center / cover no-repeat; min-height: 360px; }
+@media (max-width: 720px) {
+  .auth-layout { grid-template-columns: 1fr; }
+  .auth-visual { min-height: 240px; }
+}
