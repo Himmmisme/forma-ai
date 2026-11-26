@@ -1,4 +1,4 @@
-import { Columns2, Download, GitBranch, History, ListTree, Star } from "lucide-react";
+import { Calculator, Columns2, Download, GitBranch, History, Layers3, ListTree, Star } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, assetUrl, dateTime, useAction, useResource } from "../api";
@@ -94,6 +94,8 @@ export function VersionLinks({ id, project }: { id: string; project: string }) {
   return <>
     <Link className="btn btn-ghost" to={`/projects/${project}?parent=${id}#design-config`}><GitBranch size={15} />继续修改</Link>
     <Link className="btn btn-ghost" to={`/compare?project=${project}&right=${id}`}><Columns2 size={15} />对比</Link>
+    <Link className="btn btn-ghost" to={`/analysis?project=${project}&version=${id}`}><Layers3 size={15} />材料分析</Link>
+    <Link className="btn btn-ghost" to={`/analysis?project=${project}&version=${id}&tab=cost`}><Calculator size={15} />成本评估</Link>
   </>;
 }
 

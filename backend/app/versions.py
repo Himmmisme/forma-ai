@@ -107,9 +107,10 @@ def comparison_options(project_id: str, db: Session = Depends(database), user: U
     versions = db.execute(select(DesignVersion, Asset).join(Asset, Asset.id == DesignVersion.asset_id)
                           .where(DesignVersion.project_id == project_id).order_by(DesignVersion.number.desc())).all()
     return (
-        [{"id": asset.id, "label": f"原图 · {asset.filename}" + ("（已移除）" if asset.deleted_at else ""),
+        [{"id": asset.id, "kind": "original", "label": f"原图 · {asset.filename}" + ("（已移除）" if asset.deleted_at else ""),
           "asset": asset_view(asset)} for asset in originals]
-        + [{"id": version.id, "label": f"V{version.number:03d}", "asset": asset_view(asset)} for version, asset in versions]
+        + [{"id": version.id, "kind": "version", "label": f"V{version.number:03d}", "asset": asset_view(asset)}
+           for version, asset in versions]
     )
 
 

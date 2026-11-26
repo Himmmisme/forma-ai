@@ -18,6 +18,7 @@ from app.adapters import ADAPTERS, ImageInput, mock_images, structured
 from app.auth import member
 from app.catalog import REAL_PROTOCOLS, Capability, get_model, get_provider
 from app.core import Input, audit, database, fail, json_fields
+from app.material_schema import MOCK_MATERIALS, MaterialData
 from app.models import Asset, CallLog, DesignVersion, Job, Model, Provider, User, utcnow
 from app.projects import asset_view, project_for
 from app.storage import OUTPUT_LIMIT, asset_path, store_image, validate_image
@@ -312,7 +313,7 @@ class Scheduler:
                     raise UpstreamError("返回图片数量与请求不一致，请检查模型生成数量设置")
             else:
                 value = self.mock_text(job) if mock else structured(await adapter.text(model, prompt, images))
-                schema = Optimized if job.kind == "optimize" else Observation
+                schema = {"optimize": Optimized, "materials": MaterialData}.get(job.kind, Observation)
                 result = schema.model_validate(value).model_dump()
         except Exception:
             if simulated:
@@ -348,6 +349,8 @@ class Scheduler:
 
     @staticmethod
     def mock_text(job):
+        if job.kind == "materials":
+            return MOCK_MATERIALS
         if job.kind == "optimize":
             raw = job.inputs["raw"]
             constraints = job.inputs["constraints"]

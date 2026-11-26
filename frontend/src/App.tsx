@@ -1,9 +1,10 @@
-import { Box, Columns2, FolderOpen, History, ImageIcon, LayoutDashboard, LogOut, Menu, Moon, Settings, Shield, Sparkles, Star, Sun } from "lucide-react";
+import { Box, Columns2, FolderOpen, History, ImageIcon, Layers3, LayoutDashboard, LogOut, Menu, Moon, Settings, Shield, Sparkles, Star, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, ApiError, message } from "./api";
 import { AccountPage, AuthScreen } from "./features/Accounts";
 import { AdminPage } from "./features/Admin";
+import { AnalysisPage } from "./features/Analysis";
 import { AssetLibrary, Overview, ProjectStudio, ProjectsPage } from "./features/Projects";
 import { ComparePage, FavoritesPage, HistoryPage, WorkbenchPage } from "./features/Versions";
 import { type User, roleNames } from "./types";
@@ -15,6 +16,7 @@ const navigation = [
   { to: "/design", label: "AI 设计工作台", icon: Sparkles },
   { to: "/history", label: "历史版本", icon: History },
   { to: "/compare", label: "方案对比", icon: Columns2 },
+  { to: "/analysis", label: "材料与成本", icon: Layers3 },
   { to: "/assets", label: "素材库", icon: ImageIcon },
   { to: "/favorites", label: "收藏方案", icon: Star },
 ];
@@ -97,6 +99,7 @@ export function App() {
           <Route path="/design" element={<WorkbenchPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/compare" element={<ComparePage />} />
+          <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/assets" element={<AssetLibrary />} />
           <Route path="/settings" element={<AccountPage user={user} onUser={setUser} />} />

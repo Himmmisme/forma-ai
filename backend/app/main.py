@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from starlette.staticfiles import StaticFiles
 
-from app import auth, catalog, design, jobs, projects, versions
+from app import analysis, auth, catalog, design, jobs, prices, projects, versions
 from app.config import Settings
 from app.db import make_engine, make_sessions
 from app.middleware import RequestGuard
@@ -61,7 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok", "version": "1.0.0"}
 
     for router in (auth.router, auth.admin_router, projects.router, catalog.router, catalog.management,
-                   design.router, jobs.router, versions.router):
+                   design.router, jobs.router, versions.router, analysis.router, prices.router):
         app.include_router(router, prefix="/api")
 
     if (settings.web_dir / "assets").is_dir():
