@@ -5,7 +5,7 @@ from time import monotonic, sleep
 
 from conftest import WRITE
 from fastapi.testclient import TestClient
-from test_design import design_payload, new_project
+from test_design import design_payload, execute_queued, new_project
 
 from app.main import create_app
 from app.models import Job, utcnow
@@ -51,3 +51,20 @@ def test_queue_recovers_persisted_work_and_interruption(owner, application, sett
         assert lost["status"] == "failed" and "中断" in lost["error"]
         asset_id = done["result"]["assets"][0]["id"]
         assert client.get(f"/api/assets/{asset_id}/content").status_code == 200
+
+
+def test_queue_checks_image_project_before_loading_saved_inputs(owner, application):
+    project, original = new_project(owner)
+    _, other_original = new_project(owner)
+    queued = owner.post(f"/api/projects/{project}/generate", json=design_payload(owner, project, original))
+    assert queued.status_code == 202, queued.text
+    job_id = queued.json()["id"]
+    with application.state.sessions.begin() as db:
+        job = db.get(Job, job_id)
+        job.inputs = {**job.inputs, "asset_ids": [other_original]}
+
+    assert execute_queued(application) == job_id
+    job = owner.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "failed"
+    assert job["error"] == "任务源图片缺失或不属于此项目"
+    assert job["calls"] == []

@@ -25,6 +25,10 @@
 
 后续回归在 SQLite 和 PostgreSQL 17.12 两种环境各通过 21 项后端测试，在 Chromium 和 WebKit 分别通过 2 项端到端测试。模拟 HTTP 验证 PNG 附件、无状态字段的图片响应、VX 报告的上游 502、网关请求编号和旧型号失效时的重试保护。Ruff 检查及 TypeScript、Vite 生产构建通过。
 
+## 交付复验
+
+2026-11-26 补测持久任务读取快照图片时的归属校验。SQLite 和 PostgreSQL 17.12 两种环境各 22 项后端测试通过。Chromium 和 WebKit 使用隔离实例分别完成各 2 项端到端测试。前端生产构建与 Ruff 检查通过。`npm audit --omit=dev` 和 `pip-audit` 对各自锁定的运行依赖未报告已知漏洞。
+
 ## 复跑
 
 前置环境为 Python 3.12、Node.js 22.12 以上的 22.x 和 npm。以下命令从项目根目录执行。
@@ -45,7 +49,7 @@ npm run test:e2e -- --browser=webkit
 Pop-Location
 ```
 
-使用 PostgreSQL 运行后端测试时，将 `FORMA_TEST_DATABASE_URL` 设置为测试用数据库 DSN，测试用户需要创建临时 schema 的权限。使用前端生产构建执行浏览器用例。若默认测试端口 8185 已占用，可设 `FORMA_E2E_PORT`。
+使用 PostgreSQL 运行后端测试时，将 `FORMA_TEST_DATABASE_URL` 设置为测试用数据库 DSN，测试用户需要创建临时 schema 的权限。使用前端生产构建执行浏览器用例。每种浏览器单独启动一轮测试，以便首次初始化用例使用独立数据。若默认测试端口 8185 已占用，可设 `FORMA_E2E_PORT`。
 
 ## 已知限制与未验证项
 

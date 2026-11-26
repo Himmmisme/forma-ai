@@ -306,6 +306,8 @@ class Scheduler:
                 user = db.get(User, job.user_id)
                 if not user.enabled or job.kind.startswith("probe_") and user.role != "superadmin":
                     raise UpstreamError("任务创建者的账号或权限已停用")
+                if job.project_id:
+                    project_for(db, user, job.project_id)
                 if not provider.enabled or model and not model.enabled:
                     raise UpstreamError("服务商或模型已停用")
                 if provider.protocol in REAL_PROTOCOLS and not external_enabled(db):
@@ -316,6 +318,8 @@ class Scheduler:
                 images = []
                 for asset_id in job.inputs.get("asset_ids", []):
                     asset = db.get(Asset, asset_id)
+                    if asset is None or asset.project_id != job.project_id:
+                        raise UpstreamError("任务源图片缺失或不属于此项目")
                     try:
                         data = asset_path(self.settings.data_dir, asset_id).read_bytes()
                     except OSError as error:

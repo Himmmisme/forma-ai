@@ -12,10 +12,12 @@
 
 从空工作区初始化。开发验证使用 Windows 便携 Git、Node.js、Python 与 PostgreSQL。真实 API 密钥由部署者配置。
 
-最终验收包含 SQLite 与 PostgreSQL 各 17 项后端测试和 Chromium、WebKit 各 2 项端到端测试。完整报告见 [测试与验收](TEST.md)。
+首轮验收包含 SQLite 与 PostgreSQL 各 17 项后端测试和 Chromium、WebKit 各 2 项端到端测试。完整报告见 [测试与验收](TEST.md)。
 
 阶段 3 兼容性补充（2026-11-26）。接入 VX API 文档中的同步文生图和单张原图编辑请求，并校验图片任务终态。SQLite 19 项测试通过，Ruff 检查及前端生产构建通过。真实 VX 出图仍需操作者确认后验证。
 
 阶段 3 后续回归（2026-11-26）。单图编辑按 VX 示例上传 PNG，调用记录保存网关请求编号。生成任务显示提交时的型号，并在型号失效时提示新建任务。SQLite 和 PostgreSQL 17 各 21 项、Chromium 和 WebKit 各 2 项、Ruff 检查和前端生产构建通过。
+
+阶段 6 交付复验（2026-11-26）。任务执行前补校验项目访问权与源图片归属。SQLite 和 PostgreSQL 17 各 22 项后端测试通过，Chromium 和 WebKit 各 2 项端到端通过。Ruff 与前端生产构建通过。npm audit 和 pip-audit 对运行依赖未报告已知漏洞。
 
 部署阶段在 Windows 主机上执行了 Compose 配置检查和启动尝试。当前没有可用的 Docker 引擎。启用 Docker 的主机需补做容器启动、跨设备局域网连接和容器重启验收。真实服务需等待部署者配置凭据并测试能力。
