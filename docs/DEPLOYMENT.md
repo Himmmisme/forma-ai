@@ -1,31 +1,93 @@
-# Windows 局域网部署
+# 部署 Forma AI
 
-## 在 Windows 启动
+[English](DEPLOYMENT.en.md) · [README](../README.md)
 
-1. 安装 Docker Desktop，启用它所需的虚拟化和 WSL 2 或 Hyper-V 后端，选择 Linux 容器。启动 Docker Desktop 后用 `docker version` 确认输出包含 Server，用 `docker compose version` 确认 Compose 可用。[Docker Desktop Windows 安装说明](https://docs.docker.com/desktop/setup/install/windows-install/)
-2. 在含 `compose.yaml` 的项目根目录打开 PowerShell。执行下列命令，首次运行会生成随机数据库密码和初始化令牌，之后使用同一份 `.env`。
+克隆仓库或解压源码 ZIP 后，从含 `compose.yaml` 的项目根目录运行命令。两种部署方式都通过同一端口提供页面和 `/api`。内置 Mock 无需外部凭据或 GPU。
+
+## Windows 原生启动
+
+安装 Python 3.12、Node.js 22.12 以上的 22.x 和 npm。在 PowerShell 中执行。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+脚本会安装依赖、构建前端、迁移 SQLite，并在当前窗口前台运行服务。打开 `http://localhost:8080/`，用 `.runtime\local\setup.token` 中的令牌初始化超级管理员。可另开 PowerShell 检查服务。
+
+```powershell
+Invoke-RestMethod http://localhost:8080/api/health
+```
+
+默认仅监听本机。可传 `-Port 8081` 更换端口，传 `-Lan` 允许可信局域网访问，或用 `-Python`、`-Npm` 指定可执行文件绝对路径。按 Ctrl+C 停止。再次从同一目录启动时会复用 `.runtime\local\` 中的 SQLite 数据库、图片和密钥。
+
+## Windows Docker Compose
+
+1. 安装并启动 Docker Desktop，启用所需的 WSL 2 或 Hyper-V 后端并选择 Linux 容器。用 `docker version` 确认输出包含 Server，再运行 `docker compose version`。[Docker Desktop Windows 安装说明](https://docs.docker.com/desktop/setup/install/windows-install/)
+2. 在 PowerShell 中运行以下命令。脚本首次运行时会生成随机数据库密码和初始化令牌，之后复用同一份 `.env`。
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
    docker compose ps
+   Invoke-RestMethod http://localhost:8080/api/health
    ```
 
-3. 打开 `http://localhost:8080/`。在首次初始化页面填入 `.env` 中 `APP_SETUP_TOKEN` 的值、账号、显示名称和自选密码。初始化完成后，界面将切换为登录页。
-4. 局域网其他设备使用 `http://Windows主机IPv4:8080/`。用 `ipconfig` 查看实际网络适配器的 IPv4。访问受 Windows 防火墙管理，在专用网络中允许可信局域网设备访问应用端口。
+3. 打开 `http://localhost:8080/`。填入本地 `.env` 中的 `APP_SETUP_TOKEN` 和自行选择的账号、显示名称、密码。初始化完成后可登录。
+4. 局域网客户端用 Windows 主机的 IPv4 地址访问应用端口。用 `ipconfig` 查看主机地址，在专用网络的防火墙规则中允许可信设备访问。
 
-首次运行前可给启动脚本传 `-Port 8081`。已有实例修改 `.env` 的 `APP_PORT` 后重新启动。设置 `APP_BIND=127.0.0.1` 可只接受本机访问。用于共享或有敏感图片的实例应在受信任 HTTPS 反向代理后访问，并设 `APP_COOKIE_SECURE=1`。在本地直连 HTTP 流程中保留其默认值 0。数据库仅在 Compose 网络中使用，应用等待数据库健康后执行 Alembic 迁移。[Compose 启动顺序](https://docs.docker.com/compose/how-tos/startup-order/)
+首次运行可传 `-Port 8081`。已有实例可修改 `.env` 中的 `APP_PORT` 后重启应用。Windows Docker 启动脚本默认监听所有接口。仅供本机访问时，设 `APP_BIND=127.0.0.1` 后运行 `docker compose up -d --wait`。
+
+## Linux Docker Compose
+
+安装 Docker Engine、Compose 插件和 `openssl`。在项目根目录生成 `.env`。以下命令保留已存在的 `.env`，新文件仅供当前用户读写。
+
+```sh
+(
+  set -euC
+  umask 077
+  if [ ! -e .env ]; then
+    forma_db_password=$(openssl rand -hex 32)
+    forma_setup_token=$(openssl rand -hex 32)
+    cat > .env <<EOF
+APP_PORT=8080
+APP_BIND=127.0.0.1
+APP_COOKIE_SECURE=0
+APP_WORKER_SLOTS=4
+POSTGRES_PASSWORD=$forma_db_password
+APP_SETUP_TOKEN=$forma_setup_token
+EOF
+  fi
+)
+```
+
+配置就绪后构建、启动并检查服务。
+
+```sh
+docker compose up --build -d --wait
+docker compose ps
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+远程主机只监听回环时，可通过 SSH 转发完成首次初始化。将用户名和主机名换成自己的部署地址。
+
+```sh
+ssh -N -L 18080:127.0.0.1:8080 your-user@server.example.com
+```
+
+在客户端打开 `http://localhost:18080/`，使用服务器本地 `.env` 中的 `APP_SETUP_TOKEN`。若已修改 `APP_PORT`，同时调整隧道的目标端口。
+
+## 配置与日常运维
+
+用于共享或存放业务图片的实例通过受信任的 HTTPS 反向代理访问。将页面和 `/api` 转发到同一应用。代理需允许 32 MiB 请求体，并设置应用的 `APP_COOKIE_SECURE=1`。更新 `.env` 后运行 `docker compose up -d --wait`。本机 HTTP 使用 `APP_COOKIE_SECURE=0`。PostgreSQL 仅在 Compose 网络内提供服务，应用在数据库健康后执行 Alembic 迁移。
 
 | 变量 | 用途 |
 | --- | --- |
-| `APP_PORT` / `APP_BIND` | Windows 监听端口和地址 |
-| `POSTGRES_PASSWORD` | 初次创建数据库时采用的密码，运行期同时供应用连接 |
-| `APP_SETUP_TOKEN` | 首次注册超管使用，随机生成 |
-| `APP_COOKIE_SECURE` | HTTPS 部署填 1 |
-| `APP_WORKER_SLOTS` | 单应用进程的队列执行槽位，默认 4，范围 1–8 |
+| `APP_PORT` / `APP_BIND` | 宿主机监听端口和地址 |
+| `POSTGRES_PASSWORD` | 创建数据库卷时采用的密码，应用连接也使用它 |
+| `APP_SETUP_TOKEN` | 首次注册超级管理员的令牌，部署时随机生成 |
+| `APP_COOKIE_SECURE` | HTTPS 填 `1`，本机 HTTP 填 `0` |
+| `APP_WORKER_SLOTS` | 单应用进程的队列槽位，默认 `4`，范围 `1–8` |
 
-重复执行启动脚本可重建应用镜像。常用命令如下。
-
-```powershell
+```sh
 docker compose ps
 docker compose logs --tail 100 app
 docker compose restart app
@@ -33,17 +95,7 @@ docker compose stop
 docker compose up -d --wait
 ```
 
-应用与数据库设置为 `unless-stopped`，Docker 引擎运行时会按策略重启退出的服务。数据分别位于 `postgres_data`、`files_data` 和 `instance_secrets` 命名卷。备份前保管好 `.env`。保留卷才能继续打开原实例。 [Docker 数据卷](https://docs.docker.com/engine/storage/volumes/)
-
-## 无 Docker 的本地启动
-
-安装 Python 3.12 和 Node.js 22.12 或更高的 22.x 版本。在项目根目录执行下列命令。脚本构建前端，准备本地数据库，再在当前 PowerShell 窗口前台运行服务。
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
-```
-
-首次初始化令牌位于 `.runtime\local\setup.token`。默认端口为 8080，可传 `-Port 8081`。默认仅监听本机，传 `-Lan` 可进行同网络访问。可用 `-Python`、`-Npm` 传入可执行文件绝对路径。停止服务按 Ctrl+C。再次启动会读取同一份 SQLite、图片和密钥，均位于 Git 忽略的 `.runtime\local` 下。
+更新或重启时保留 Compose 项目名和 `postgres_data`、`files_data`、`instance_secrets` 三个命名卷。应用与数据库使用 `unless-stopped` 重启策略。实际 `.env`、本地运行目录、数据库、密钥、备份和业务图片仅保存在部署环境中。[Docker 数据卷](https://docs.docker.com/engine/storage/volumes/)
 
 ## 启用真实 API
 
@@ -82,6 +134,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
    $backupDir = (Resolve-Path .\.runtime\recovery\files).Path
    $keysDir = (Resolve-Path .\.runtime\recovery\keys).Path
    $env:APP_PORT = '8081'
+   $env:APP_BIND = '127.0.0.1'
+   $env:APP_COOKIE_SECURE = '0'
+   docker compose -p forma-recovery build app
    docker compose -p forma-recovery up -d --wait db
    docker compose -p forma-recovery run --rm --no-deps -v "${backupDir}:/recovery/files:ro" -v "${keysDir}:/recovery/keys:ro" app python -m app.manage restore /recovery/files/snapshot.zip --key-file /recovery/keys/provider.key
    docker compose -p forma-recovery up -d --wait app
@@ -94,7 +149,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 
 ## 部署现场验收
 
-1. 在能运行 Linux 容器的 Windows 主机，用独立的测试实例执行 Docker 启动步骤。通过 `docker compose ps` 确认应用和数据库健康。
+1. 用独立的测试实例执行对应启动步骤，确认健康接口返回 HTTP 200 和状态 ok。Docker 部署还需通过 `docker compose ps` 确认应用和数据库健康。
 2. 在同一局域网的另一台设备打开主机 IPv4 地址，登录测试账号，使用示例素材生成一版 Mock 成果并下载图片。
-3. 重启两个容器。再次确认健康状态、登录、项目、版本及图片下载。可对比重启前后下载图片的 SHA-256。
+3. 重启应用和所用数据库服务。再次确认健康状态、登录、项目、版本及图片下载。可对比重启前后下载图片的 SHA-256。
 4. 需要验证真实模型时，在部署环境确认已配置的型号与凭据，由操作者确认提交测试。
