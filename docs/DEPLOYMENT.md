@@ -47,9 +47,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 
 ## 启用真实 API
 
-超管登录后打开「管理后台 → API 服务商与模型」。先添加服务商并保存 Key，再到模型列表填入供应商实际启用的模型 ID、能力、输入限制和输出规格，分别测试连接和模型。官方 OpenAI、Gemini 使用固定上游地址。兼容服务填写公网 HTTPS API 前缀，路径和参数支持情况以测试为准。
+超管登录后打开「管理后台 → API 服务商与模型」。先添加服务商并保存 Key，再到模型列表填入供应商实际启用的模型 ID、能力、输入限制和输出规格，分别测试连接和模型。OpenAI 官方使用固定上游地址。Gemini API 默认使用官方地址，也可填写自定义 API 前缀。OpenAI Compatible 使用填写的 API 前缀。路径和参数支持情况以测试为准。
 
 图片工作台会把产品原图作为输入。OpenAI 及兼容协议需为工作台的生成模型勾选图片生成和图片编辑，并按模型文档填写规格。后台可按任务分别绑定模型。使用者在操作入口同意发送相关图片和需求后才发起外部调用。超管可以在系统设置中暂停外部 API，暂停期间仍可用 Mock。
+
+### 自定义 HTTP 服务商
+
+- Gemini 原生 REST 接口选 `Gemini API`。输入 `http://api.example.com:8080` 时，Forma AI 会补全 `/v1beta`。服务使用其他路径时可填写完整 API 前缀，例如 `http://api.example.com:8080/proxy/v1`。添加模型时，模型 ID 填写连接测试返回的 `models/` 之后的部分。[Gemini API 模型列表](https://aistudio.google.com/api-reference/models)
+- OpenAI 兼容接口选 `OpenAI Compatible`，填写后端能访问的完整 API 前缀，例如 `http://127.0.0.1:8080/v1`。图片响应可以使用 `b64_json` 或公网 HTTPS 下载链接。
+
+保存后运行「连接测试」，Forma AI 会在前缀后添加 `/models`。无需验证的 HTTP 服务可留空 Key。公网 HTTP 会明文传输凭据和请求内容。已保存 Key 的服务商更换地址时，需重新填写目标地址的 Key。同一台 Windows 主机上若 API 已占用 8080，可用 `-Port 8081` 启动 Forma AI。
 
 ### VX API 图片模型
 

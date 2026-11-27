@@ -45,6 +45,8 @@ API 使用同源 JSON、Cookie 会话及后台权限校验。修改请求带 `X-
 | `/admin/system`、`/admin/audit`、`/admin/calls` | GET / PUT 设置，GET 操作和 API 调用记录 |
 | `/admin/backups`、`/admin/backups/{id}/download` | GET 列表、POST 创建完整快照、GET 下载 |
 
+超管保存 Gemini API 或 OpenAI Compatible 服务商时，`base_url` 支持 HTTP 接口前缀和自定义端口。Gemini API 留空时使用官方地址，自定义地址只有主机和端口时使用 `/v1beta`。HTTP 服务的 `api_key` 可省略。连接与任务调用时，公网域名必须解析为公网地址，本地 HTTP 域名必须解析为回环或私有 IPv4 地址。图片下载地址使用标准端口的公网 HTTPS。
+
 `request_key` 由客户端生成。相同任务种类和幂等键仅接受同一组业务参数。提交返回任务 ID，状态为 queued、running、succeeded 或 failed。发送设计输入给外部服务须提供 `ack_external`，已知提示词冲突须提供 `ack_conflicts`。普通用户请求他人项目、素材和版本时返回 404。
 
 分支修改同时使用父版本成果和产品原图。`edit` 默认模型须支持 `image_edit`、`multi_image`，且允许至少两张输入图。VX API 的已适配单图型号可用于图片编辑能力测试和单张原图的首轮生成。历史 GPT 文生图型号只可执行图片生成能力测试。模型配置示例见 [Windows 局域网部署](DEPLOYMENT.md#vx-api-图片模型)。

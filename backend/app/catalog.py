@@ -11,7 +11,7 @@ from app.auth import admin, member, superadmin
 from app.core import Input, audit, database, fail, json_fields
 from app.models import Model, ModelBinding, PromptTemplate, Provider, Setting, User
 from app.prompts import DIRECTIONS, LEVELS, template_view
-from app.transport import fixed_endpoint, normalize_endpoint, seal
+from app.transport import default_endpoint, normalize_endpoint, seal
 
 router = APIRouter(prefix="/design", tags=["设计配置"])
 management = APIRouter(prefix="/admin", tags=["AI 管理"])
@@ -205,18 +205,26 @@ def admin_catalog(db: Session = Depends(database), _: User = Depends(superadmin)
 def save_provider(body: ProviderInput, request: Request, db: Session, actor: User, provider: Provider | None = None):
     if provider and provider.protocol != body.protocol:
         fail(422, "请新建服务商以更换协议类型")
-    endpoint = fixed_endpoint(body.protocol) or normalize_endpoint(body.base_url)
-    if body.base_url and body.protocol != "compatible" and body.base_url.rstrip("/") != endpoint:
-        fail(422, "官方协议使用固定的 HTTPS 接口地址")
+    endpoint = default_endpoint(body.protocol)
+    if body.protocol == "openai":
+        if body.base_url and body.base_url.rstrip("/") != endpoint:
+            fail(422, "OpenAI 官方使用固定的 HTTPS 接口地址")
+    elif body.base_url or endpoint is None:
+        default_path = "/v1beta" if body.protocol == "gemini" else ""
+        endpoint = normalize_endpoint(body.base_url, allow_http=True, default_path=default_path)
+    http_provider = endpoint.startswith("http://")
     provider = provider or Provider()
-    if provider.base_url and provider.base_url != endpoint and not body.api_key:
+    if (
+        provider.base_url and provider.base_url != endpoint and not body.api_key
+        and (provider.key_encrypted is not None or not http_provider)
+    ):
         fail(422, "更换 Base URL 后请重新输入该站点的 API Key")
     for key, value in body.model_dump(exclude={"api_key", "base_url"}).items():
         setattr(provider, key, value)
     provider.base_url = endpoint
     if body.api_key:
         provider.key_encrypted = seal(request.app.state.settings.secret_dir, body.api_key)
-    if body.enabled and not provider.key_encrypted:
+    if body.enabled and not http_provider and not provider.key_encrypted:
         fail(422, "启用服务商需要 API Key")
     db.add(provider)
     db.flush()

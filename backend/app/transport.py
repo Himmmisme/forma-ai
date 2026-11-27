@@ -13,6 +13,8 @@ from app.core import fail
 OFFICIAL = {"openai": "https://api.openai.com/v1", "gemini": "https://generativelanguage.googleapis.com/v1beta"}
 MAX_RESPONSE = 80 * 1024 * 1024
 IPV6_TRANSLATION = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("64:ff9b:1::/48"))
+PRIVATE_IPV4 = tuple(ipaddress.ip_network(prefix) for prefix in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+LOCAL_DNS_SUFFIXES = (".local", ".localhost", ".internal", ".home", ".lan")
 
 
 class UpstreamError(Exception):
@@ -22,7 +24,7 @@ class UpstreamError(Exception):
         self.request_id = request_id
 
 
-def fixed_endpoint(protocol: str) -> str | None:
+def default_endpoint(protocol: str) -> str | None:
     return OFFICIAL.get(protocol)
 
 
@@ -34,35 +36,59 @@ def public_ip(address: str) -> bool:
     return ip.is_global and not (ip.is_multicast or ip.is_reserved or ip.is_unspecified or ip.is_link_local)
 
 
-def check_url(value: str) -> httpx.URL:
+def local_ip(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return ip.is_loopback or any(ip in network for network in PRIVATE_IPV4)
+
+
+def local_host(host: str) -> bool:
+    try:
+        return local_ip(host)
+    except ValueError:
+        hostname = host.rstrip(".")
+        return "." not in hostname or hostname.endswith(LOCAL_DNS_SUFFIXES)
+
+
+def check_url(value: str, *, allow_http: bool = False) -> httpx.URL:
     try:
         url = httpx.URL(value)
         host = url.raw_host.decode("ascii")
-        if url.scheme != "https" or not host or url.port not in {None, 443} or url.userinfo or url.fragment:
+        http = allow_http and url.scheme == "http"
+        if not host or url.userinfo or "#" in value:
+            raise ValueError
+        if http:
+            if "%" in host or (url.port is not None and not 1 <= url.port <= 65535):
+                raise ValueError
+        elif url.scheme != "https" or url.port not in {None, 443}:
             raise ValueError
         try:
-            ip = ipaddress.ip_address(host)
+            ip = str(ipaddress.ip_address(host))
         except ValueError:
-            if "." not in host or host.endswith((".local", ".localhost", ".internal", ".home", ".lan", ".")):
+            if not http and ("." not in host or host.endswith((*LOCAL_DNS_SUFFIXES, "."))):
                 raise ValueError from None
         else:
-            if not public_ip(str(ip)):
+            if not (public_ip(ip) or http and local_ip(ip)):
                 raise ValueError
         return url
     except (ValueError, UnicodeError, httpx.InvalidURL) as error:
+        if allow_http and value.lower().startswith("http://"):
+            raise UpstreamError("请填写有效的 HTTP 地址和端口，移除凭据和片段。支持公网、回环和私有 IPv4 地址。") from error
         raise UpstreamError("连接地址必须为公网 HTTPS，且不含凭据、片段或自定义端口") from error
 
 
-def normalize_endpoint(value: str) -> str:
+def normalize_endpoint(value: str, *, allow_http: bool = False, default_path: str = "") -> str:
     try:
-        url = check_url(value)
-        if url.query or not re.fullmatch(r"(?:/[A-Za-z0-9_.~-]+)*/?", url.path) or any(
+        url = check_url(value, allow_http=allow_http)
+        if b"?" in url.raw_path or not re.fullmatch(r"(?:/[A-Za-z0-9_.~-]+)*/?", url.path) or any(
             part in {".", ".."} for part in url.path.split("/")
         ):
-            raise UpstreamError("Base URL 请填写完整 HTTPS 接口前缀，不含查询参数")
+            raise UpstreamError("Base URL 请填写完整接口前缀，并移除查询参数")
+        endpoint = str(url).rstrip("/") + (default_path if url.path in {"", "/"} else "")
+        if len(endpoint) > 512:
+            raise UpstreamError("Base URL 请控制在 512 个字符以内")
     except UpstreamError as error:
         fail(422, str(error))
-    return str(url).rstrip("/")
+    return endpoint
 
 
 def vault(directory: Path, *, create: bool = True) -> Fernet:
@@ -101,9 +127,14 @@ def unseal(directory: Path, token: str | None) -> str:
 
 
 async def pinned_address(url: httpx.URL) -> str:
-    entries = await asyncio.get_running_loop().getaddrinfo(url.host, 443, type=socket.SOCK_STREAM)
+    port = url.port or (80 if url.scheme == "http" else 443)
+    entries = await asyncio.get_running_loop().getaddrinfo(url.host, port, type=socket.SOCK_STREAM)
     addresses = list(dict.fromkeys(entry[4][0] for entry in entries))
-    if not addresses or any(not public_ip(address) for address in addresses):
+    private_target = url.scheme == "http" and local_host(url.host)
+    allowed_ip = local_ip if private_target else public_ip
+    if not addresses or any(not allowed_ip(address) for address in addresses):
+        if private_target:
+            raise UpstreamError("本地域名须解析到本机或私有 IPv4 网络")
         raise UpstreamError("目标域名未解析为可访问的公网地址")
     return next((address for address in addresses if ":" not in address), addresses[0])
 
@@ -117,13 +148,13 @@ def response_id(headers: httpx.Headers) -> str | None:
 
 
 class SafeHTTP:
-    """Use the address checked during this request, while preserving TLS host verification."""
+    """Connect to the validated address and preserve TLS host verification for HTTPS."""
 
     def __init__(self, timeout: int):
         self.timeout = timeout
 
-    async def request(self, method, destination, *, headers=None, limit=MAX_RESPONSE, **body):
-        url = check_url(destination)
+    async def request(self, method, destination, *, headers=None, limit=MAX_RESPONSE, allow_http=False, **body):
+        url = check_url(destination, allow_http=allow_http)
         remote_id = None
         try:
             async with asyncio.timeout(self.timeout):

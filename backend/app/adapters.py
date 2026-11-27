@@ -78,6 +78,8 @@ def check_vx_image_response(response, http_status):
 
 
 class RemoteAdapter:
+    allow_http = False
+
     def __init__(self, base_url, key, timeout, observer, http=None):
         self.base_url = base_url
         self.key = key
@@ -86,12 +88,14 @@ class RemoteAdapter:
 
     @property
     def headers(self):
-        return {"Authorization": f"Bearer {self.key}"}
+        return {"Authorization": f"Bearer {self.key}"} if self.key is not None else {}
 
     async def json(self, operation, path, *, method="POST", vx_image=False, **kwargs):
         log = self.observer.start(operation)
         status = request_id = None
         try:
+            if self.allow_http and self.base_url.startswith("http://"):
+                kwargs["allow_http"] = True
             raw, status, request_id = await self.http.request(method, self.base_url + path, headers=self.headers, **kwargs)
             response = json.loads(raw)
             if not isinstance(response, dict):
@@ -152,6 +156,8 @@ class OpenAIAdapter(RemoteAdapter):
 
 
 class CompatibleAdapter(OpenAIAdapter):
+    allow_http = True
+
     async def text(self, model, prompt, images):
         content = [{"type": "text", "text": prompt}]
         content.extend({"type": "image_url", "image_url": {"url": image.uri}} for image in images)
@@ -197,9 +203,11 @@ class CompatibleAdapter(OpenAIAdapter):
 
 
 class GeminiAdapter(RemoteAdapter):
+    allow_http = True
+
     @property
     def headers(self):
-        return {"x-goog-api-key": self.key}
+        return {"x-goog-api-key": self.key} if self.key is not None else {}
 
     async def content(self, model, prompt, images, config=None):
         parts = [{"text": prompt}]

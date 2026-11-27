@@ -6,7 +6,7 @@ import { type Capability, type Job, type Model, type Protocol, type Provider, ty
 import { Button, Empty, ErrorLine, Field, IconButton, Loading, Modal } from "../ui";
 import { JobItem } from "./Jobs";
 
-const protocols: Record<Protocol, string> = { mock: "Mock", openai: "OpenAI 官方", gemini: "Gemini 官方", compatible: "OpenAI Compatible" };
+const protocols: Record<Protocol, string> = { mock: "Mock", openai: "OpenAI 官方", gemini: "Gemini API", compatible: "OpenAI Compatible" };
 interface AdminCatalog { providers: Provider[]; models: Model[]; bindings: Partial<Record<Task, string>> }
 type ConfigDialog = { type: "provider"; item?: Provider } | { type: "model"; item?: Model } |
   { type: "probe"; provider?: Provider; model?: Model };
@@ -22,7 +22,7 @@ export function AISettings() {
   const { providers, models, bindings } = resource.data;
   return <div className="form-stack">
     <section className="panel">
-      <div className="section-heading"><div><h2>服务商</h2><p>管理 HTTPS 连接、凭据、超时和并发。</p></div>
+      <div className="section-heading"><div><h2>服务商</h2><p>管理服务商连接、凭据、超时和并发。</p></div>
         <Button variant="primary" onClick={() => setDialog({ type: "provider" })}><Plus size={16} />添加服务商</Button>
       </div>
       <ErrorLine error={resource.error} />
@@ -83,6 +83,7 @@ export function AISettings() {
 
 function ProviderEditor({ item, close, saved }: Save & { item?: Provider }) {
   const [protocol, setProtocol] = useState(item?.protocol ?? "openai");
+  const customEndpoint = protocol === "compatible" || protocol === "gemini";
   const action = useAction();
   return <Modal title={item ? "编辑服务商" : "添加服务商"} onClose={close}>
     <form className="form-stack" onSubmit={(event) => {
@@ -101,10 +102,13 @@ function ProviderEditor({ item, close, saved }: Save & { item?: Provider }) {
       <Field label="协议"><select value={protocol} disabled={!!item} onChange={(event) => setProtocol(event.target.value as Protocol)}>
         {Object.entries(protocols).filter(([key]) => key !== "mock").map(([key, name]) => <option key={key} value={key}>{name}</option>)}
       </select></Field>
-      {protocol === "compatible" && <Field label="Base URL" hint="公网 HTTPS API 前缀，如 https://api.example.com/v1">
-        <input name="base_url" type="url" defaultValue={item?.base_url} maxLength={512} required />
+      {customEndpoint && <Field label="Base URL" hint={protocol === "gemini" ?
+        "留空使用 Google 官方 API。填写自定义地址时，省略路径会使用 /v1beta。" :
+        "填写 API 前缀，例如 https://api.example.com/v1 或 http://192.168.1.50:8080/v1"}>
+        <input name="base_url" type="url" defaultValue={item?.base_url} maxLength={512} required={protocol === "compatible"} />
       </Field>}
-      <Field label="API Key" hint={item?.has_key ? "已加密保存。留空保留当前 Key。" : "凭据将使用实例独立密钥加密。"}>
+      <Field label="API Key" hint={item?.has_key ? "已加密保存。留空保留当前 Key。" :
+        customEndpoint ? "无需验证的 HTTP 服务可留空。" : "凭据将使用实例独立密钥加密。"}>
         <input name="key" type="password" autoComplete="new-password" maxLength={4096} />
       </Field>
       <div className="form-grid">
@@ -150,7 +154,7 @@ function ModelEditor({ item, providers, close, saved }: Save & { item?: Model; p
           <input type="checkbox" name="capabilities" value={key} defaultChecked={item?.capabilities.includes(key as Capability)} />{label}
         </label>)}
       </div></fieldset>
-      <Field label="图片规格" hint="每行填写 比例 | 显示名 | API 参数。例 1:1 | 1024 × 1024 | 1024x1024。VX API 图片模型可用 1K。Gemini 官方使用模型支持的 imageSize，default 表示省略。">
+      <Field label="图片规格" hint="每行填写 比例 | 显示名 | API 参数。例 1:1 | 1024 × 1024 | 1024x1024。VX API 图片模型可用 1K。Gemini API 使用模型支持的 imageSize，default 表示省略。">
         <textarea name="sizes" rows={4} defaultValue={item?.sizes.map((size) => `${size.ratio} | ${size.label} | ${size.value}`).join("\n")} />
       </Field>
       <div className="form-grid">

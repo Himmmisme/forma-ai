@@ -314,7 +314,10 @@ class Scheduler:
                     raise UpstreamError("系统已暂停外部 API 调用")
                 if provider.base_url != job.inputs["provider"]["base_url"]:
                     raise UpstreamError("服务商地址已改变，请提交新的任务")
-                key = unseal(self.settings.secret_dir, provider.key_encrypted) if provider.protocol != "mock" else None
+                http_provider = provider.protocol in {"compatible", "gemini"} and provider.base_url.startswith("http://")
+                key = None
+                if provider.protocol != "mock" and (provider.key_encrypted is not None or not http_provider):
+                    key = unseal(self.settings.secret_dir, provider.key_encrypted)
                 images = []
                 for asset_id in job.inputs.get("asset_ids", []):
                     asset = db.get(Asset, asset_id)
